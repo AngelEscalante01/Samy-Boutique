@@ -14,5 +14,10 @@ class SettingsSeeder extends Seeder
         // type: percent|amount (equivalente a %|$)
         Setting::set('loyalty.type', 'percent');
         Setting::set('loyalty.value', 10);
+
+        // Limpieza de imágenes de productos vendidos
+        Setting::set('sales.delete_images_after_days', 15);
+        // Modo: soft (auditoría) | hard (elimina registro)
+        Setting::set('sales.delete_images_mode', 'soft');
     }
 }

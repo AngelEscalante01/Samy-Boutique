@@ -64,3 +64,16 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+
+## Samy Boutique: limpieza de imágenes vendidas
+
+- Comando diario: `php artisan images:cleanup-sold`.
+- Scheduler: corre diario a las `02:00`.
+- Settings:
+	- `sales.delete_images_after_days` (int, default `15`)
+	- `sales.delete_images_mode` (`soft`|`hard`, default `soft`)
+- Regla: solo procesa productos `vendido` con `sold_at` menor o igual al umbral.
+- Si el archivo físico no existe, no falla; continúa y marca/borra registro según modo.
+- Devoluciones/cancelaciones:
+	- Si el producto vuelve a inventario antes del umbral, no se habrán eliminado fotos.
+	- Si vuelve después del umbral, puede regresar sin fotos; la UI debe mostrar placeholder y permitir re-subir imágenes.

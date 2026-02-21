@@ -15,17 +15,24 @@ class ProductImage extends Model
         'product_id',
         'path',
         'sort',
+        'deleted_at',
+        'deleted_by',
     ];
 
     protected $casts = [
         'sort' => 'integer',
+        'deleted_at' => 'datetime',
+        'deleted_by' => 'integer',
     ];
 
     protected $appends = ['url'];
 
     public function getUrlAttribute(): string
     {
-        return Storage::disk('public')->url($this->path);
+        /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
+        $disk = Storage::disk('public');
+
+        return $disk->url($this->path);
     }
 
     public function product(): BelongsTo

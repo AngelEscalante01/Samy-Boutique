@@ -20,7 +20,7 @@ class InitialManagerUserSeeder extends Seeder
                 $user = User::create([
                     'name' => $name,
                     'email' => $email,
-                    'password' => Hash::make('Password123!'),
+                    'password' => Hash::make('password'),
                     'email_verified_at' => now(),
                 ]);
             } else {
@@ -31,7 +31,7 @@ class InitialManagerUserSeeder extends Seeder
             $user->syncRoles([$role]);
         };
 
-        $ensureUserWithRole('gerente@samy.test', 'Gerente', 'gerente');
-        $ensureUserWithRole('cajero@samy.test', 'Cajero', 'cajero');
+        $ensureUserWithRole('gerente@gmail.com', 'Gerente', 'gerente');
+        $ensureUserWithRole('cajero@gmail.com', 'Cajero', 'cajero');
     }
 }
