@@ -9,7 +9,12 @@ defineEmits(['add']);
 function imageUrl(product) {
     const first = product?.images?.[0];
     if (!first) return null;
-    return first.url ?? (first.path ? `/storage/${first.path}` : null);
+    return first.image_url ?? first.url ?? (first.path ? `/storage/${first.path}` : null);
+}
+
+function setPlaceholder(event) {
+    event.target.onerror = null;
+    event.target.src = '/images/product-placeholder.svg';
 }
 
 function money(v) {
@@ -33,6 +38,7 @@ function money(v) {
                 v-if="imageUrl(product)"
                 :src="imageUrl(product)"
                 :alt="product.name"
+                @error="setPlaceholder"
                 class="h-full w-full object-cover transition-transform duration-200 group-hover:scale-105"
             />
             <div v-else class="flex h-full w-full flex-col items-center justify-center gap-1 bg-gray-50">

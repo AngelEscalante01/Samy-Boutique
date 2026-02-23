@@ -20,6 +20,7 @@ use App\Http\Controllers\Catalogs\CategoryController;
 use App\Http\Controllers\Catalogs\SizeController;
 use App\Http\Controllers\Catalogs\ColorController;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\Storage;
 
 Route::get('/', function () {
     return redirect()->route('login');
@@ -33,6 +34,23 @@ Route::get('/catalogo/p/{product:sku}', [PublicCatalogController::class, 'show']
 
 Route::get('/offline', [PublicCatalogController::class, 'offline'])
     ->name('public.offline');
+
+Route::get('/storage/{path}', function (string $path) {
+    $normalized = ltrim(str_replace('\\\\', '/', $path), '/');
+
+    abort_if($normalized === '' || str_contains($normalized, '..'), 404);
+
+    $disk = Storage::disk('public');
+
+    if (! $disk->exists($normalized)) {
+        abort(404);
+    }
+
+    $absolutePath = $disk->path($normalized);
+    return response()->file($absolutePath, [
+        'Cache-Control' => 'public, max-age=31536000, immutable',
+    ]);
+})->where('path', '.*')->name('storage.fallback');
 
 Route::get('/dashboard', [DashboardController::class, 'index'])
     ->middleware(['auth', 'verified'])

@@ -6,23 +6,44 @@ import { VitePWA } from 'vite-plugin-pwa';
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), '');
 
-    const normalizedAppUrl = (env.APP_URL || '').trim();
-    const appPathPrefix = (() => {
-        if (!normalizedAppUrl) return '';
+    const normalizeBasePath = (value) => {
+        const raw = (value || '').trim();
+
+        if (!raw || raw === '/') {
+            return '/';
+        }
+
+        const withLeadingSlash = raw.startsWith('/') ? raw : `/${raw}`;
+        const withoutTrailingSlash = withLeadingSlash.replace(/\/+$/, '');
+
+        return `${withoutTrailingSlash}/`;
+    };
+
+    const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    const appUrlPath = (() => {
+        const normalizedAppUrl = (env.APP_URL || '').trim();
+        if (!normalizedAppUrl) return '/';
 
         try {
             const pathname = new URL(normalizedAppUrl).pathname || '';
-            return pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+            return pathname || '/';
         } catch {
-            return '';
+            return '/';
         }
     })();
 
-    const pwaScope = appPathPrefix ? `${appPathPrefix}/` : '/';
-    const catalogStartUrl = `${appPathPrefix}/catalogo` || '/catalogo';
-    const offlineFallbackUrl = `${appPathPrefix}/offline` || '/offline';
+    const appBase = normalizeBasePath(env.VITE_APP_BASE_PATH || appUrlPath);
+    const appBasePrefix = appBase === '/' ? '' : appBase.slice(0, -1);
+
+    const startUrl = `${appBasePrefix}/login`;
+    const offlineFallbackUrl = `${appBasePrefix}/offline`;
+
+    const inAppScopeRegex = new RegExp(`^${escapeRegExp(appBasePrefix || '')}/`);
+    const scopedStaticDenyRegex = new RegExp(`^${escapeRegExp(appBasePrefix || '')}/(?:api|storage|build)/`);
 
     return {
+        base: appBase,
         plugins: [
         laravel({
             input: 'resources/js/app.js',
@@ -50,29 +71,29 @@ export default defineConfig(({ mode }) => {
                 name: 'Samy Boutique',
                 short_name: 'Samy',
                 description: 'Catalogo de moda Samy Boutique. Ropa con estilo.',
-                start_url: catalogStartUrl,
-                scope: pwaScope,
+                start_url: startUrl,
+                scope: appBase,
                 display: 'standalone',
-                orientation: 'portrait',
+                orientation: 'any',
                 theme_color: '#0a0a0a',
                 background_color: '#fafaf9',
                 lang: 'es',
                 categories: ['shopping', 'lifestyle'],
                 icons: [
                     {
-                        src: '../pwa-192x192.png',
+                        src: `${appBasePrefix}/pwa-192x192.png`,
                         sizes: '192x192',
                         type: 'image/png',
                         purpose: 'any',
                     },
                     {
-                        src: '../pwa-512x512.png',
+                        src: `${appBasePrefix}/pwa-512x512.png`,
                         sizes: '512x512',
                         type: 'image/png',
                         purpose: 'any',
                     },
                     {
-                        src: '../pwa-512x512-maskable.png',
+                        src: `${appBasePrefix}/pwa-512x512-maskable.png`,
                         sizes: '512x512',
                         type: 'image/png',
                         purpose: 'maskable',
@@ -80,10 +101,13 @@ export default defineConfig(({ mode }) => {
                 ],
             },
             workbox: {
+                cleanupOutdatedCaches: true,
                 // Cachear todos los assets compilados por Vite
                 globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
                 globDirectory: 'public/build',
                 navigateFallback: offlineFallbackUrl,
+                navigateFallbackAllowlist: [inAppScopeRegex],
+                navigateFallbackDenylist: [scopedStaticDenyRegex],
                 additionalManifestEntries: [
                     { url: offlineFallbackUrl, revision: null },
                 ],
@@ -100,7 +124,7 @@ export default defineConfig(({ mode }) => {
                                 maxEntries: 300,
                                 maxAgeSeconds: 60 * 60 * 24 * 7, // 7 días
                             },
-                            cacheableResponse: { statuses: [0, 200] },
+                            cacheableResponse: { statuses: [200] },
                         },
                     },
                     // Assets estáticos de build (js/css) — stale-while-revalidate
@@ -109,7 +133,7 @@ export default defineConfig(({ mode }) => {
                         handler: 'StaleWhileRevalidate',
                         options: {
                             cacheName: 'samy-assets',
-                            cacheableResponse: { statuses: [0, 200] },
+                            cacheableResponse: { statuses: [200] },
                         },
                     },
                     // Listado del catálogo público — network-first con fallback a caché
@@ -123,7 +147,7 @@ export default defineConfig(({ mode }) => {
                                 maxEntries: 20,
                                 maxAgeSeconds: 60 * 60 * 24,
                             },
-                            cacheableResponse: { statuses: [0, 200] },
+                            cacheableResponse: { statuses: [200] },
                         },
                     },
                     // Detalle de producto público /catalogo/p/:sku — network-first con fallback a caché
@@ -137,7 +161,7 @@ export default defineConfig(({ mode }) => {
                                 maxEntries: 50,
                                 maxAgeSeconds: 60 * 60 * 24, // 1 día
                             },
-                            cacheableResponse: { statuses: [0, 200] },
+                            cacheableResponse: { statuses: [200] },
                         },
                     },
                 ],

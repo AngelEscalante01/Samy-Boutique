@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Resources\ProductResource;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Product;
@@ -38,7 +39,7 @@ class PosController extends Controller
                 'gender'      => $gender,
                 'category_id' => $categoryId,
             ],
-            'products'   => $products,
+            'products'   => ProductResource::collection($products),
             'categories' => $categories,
             'can' => [
                 'createSale'         => $user->can('sales.create'),

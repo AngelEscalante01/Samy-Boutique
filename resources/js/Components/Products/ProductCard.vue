@@ -16,7 +16,12 @@ const hasImages = computed(() => images.value.length > 0);
 const hasMultiple = computed(() => images.value.length > 1);
 
 function imgUrl(img) {
-    return img.url ?? (img.path ? `/storage/${img.path}` : null);
+    return img.image_url ?? img.url ?? (img.path ? `/storage/${img.path}` : null);
+}
+
+function setPlaceholder(event) {
+    event.target.onerror = null;
+    event.target.src = '/images/product-placeholder.svg';
 }
 function prev() {
     currentIndex.value = (currentIndex.value - 1 + images.value.length) % images.value.length;
@@ -63,6 +68,7 @@ const profit = (p) => {
                 v-if="hasImages"
                 :src="imgUrl(images[currentIndex])"
                 :alt="`${product.name} ${currentIndex + 1}`"
+                @error="setPlaceholder"
                 class="h-full w-full object-cover transition-all duration-300"
             />
 

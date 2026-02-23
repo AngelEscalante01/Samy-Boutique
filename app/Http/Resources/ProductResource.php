@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Models\ProductImage;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -46,8 +47,9 @@ class ProductResource extends JsonResource
             ],
             'images' => $this->whenLoaded('images', fn () => $this->images->map(fn ($img) => [
                 'id' => $img->id,
-                'path' => $img->path,
-                'url' => $img->url,
+                'path' => ProductImage::normalizePath($img->path),
+                'image_url' => asset('storage/'.ProductImage::normalizePath($img->path)),
+                'url' => asset('storage/'.ProductImage::normalizePath($img->path)),
                 'sort' => $img->sort,
             ])),
         ];

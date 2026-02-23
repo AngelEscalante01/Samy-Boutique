@@ -68,7 +68,12 @@ function money(v) {
 
 function imageUrl(product) {
   const img = product?.images?.[0]
-  return img?.url ?? (img?.path ? `/storage/${img.path}` : null)
+  return img?.image_url ?? img?.url ?? (img?.path ? `/storage/${img.path}` : null)
+}
+
+function setPlaceholder(event) {
+  event.target.onerror = null
+  event.target.src = '/images/product-placeholder.svg'
 }
 
 const hasProducts = computed(() => (props.products?.data?.length ?? 0) > 0)
@@ -253,6 +258,7 @@ onBeforeUnmount(() => {
                 v-if="imageUrl(product)"
                 :src="imageUrl(product)"
                 :alt="product.name"
+                @error="setPlaceholder"
                 class="h-full w-full object-cover transition duration-300 group-hover:scale-105"
               />
               <div v-else class="flex h-full items-center justify-center">

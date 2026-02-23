@@ -77,3 +77,75 @@ The Laravel framework is open-sourced software licensed under the [MIT license](
 - Devoluciones/cancelaciones:
 	- Si el producto vuelve a inventario antes del umbral, no se habrán eliminado fotos.
 	- Si vuelve después del umbral, puede regresar sin fotos; la UI debe mostrar placeholder y permitir re-subir imágenes.
+
+## PWA (evitar 404 al abrir instalada)
+
+Configuración soportada en `vite.config.js`:
+
+- `manifest.start_url` apunta a una ruta existente (`/login`).
+- `manifest.scope` y `base` de Vite usan `VITE_APP_BASE_PATH`.
+- `workbox` solo cachea respuestas `200` (no cachea 404).
+- `navigateFallback` usa `/offline` dentro del prefijo de la app.
+
+### Escenario A: app en raíz del dominio
+
+En `.env`:
+
+```dotenv
+APP_URL=https://tu-dominio.com
+VITE_APP_BASE_PATH=/
+```
+
+### Escenario B: app en subcarpeta
+
+Ejemplo en `.env`:
+
+```dotenv
+APP_URL=https://tu-dominio.com/samy-boutique
+VITE_APP_BASE_PATH=/samy-boutique/
+```
+
+### Reset completo del Service Worker
+
+1. DevTools > Application > Service Workers > `Unregister`.
+2. DevTools > Application > Storage > `Clear site data`.
+3. Hard refresh (`Ctrl+F5`).
+4. Instalar de nuevo la PWA.
+
+### Checklist
+
+- Abrir `https://tu-dominio.com[/prefijo]/manifest.webmanifest`.
+- Abrir `start_url` (`/login` con prefijo si aplica) y verificar que responde 200.
+- Instalar PWA y abrirla: no debe mostrar 404.
+
+## Neubox sin SSH (solución práctica)
+
+Si estás en hosting compartido y no puedes ejecutar `storage:link`, este proyecto incluye fallback en Laravel para servir URLs de `/storage/*` desde `storage/app/public`.
+
+### 1) Variables recomendadas
+
+Si tu dominio abre directo en raíz (ej: `https://samy-boutique.makekdweb.com/pos`), usa:
+
+```dotenv
+APP_URL=https://samy-boutique.makekdweb.com
+VITE_APP_BASE_PATH=/
+```
+
+No uses `/public` dentro de `APP_URL` cuando el dominio ya apunta al `public` de Laravel.
+
+### 2) Deploy sin SSH
+
+- Compila local: `npm run build`.
+- Sube por File Manager/FTP el contenido actualizado de `public/build`.
+- Sube código PHP actualizado (incluyendo `routes/web.php`).
+
+### 3) Si no puedes crear symlink
+
+No bloquea la app: el fallback de `/storage/*` entrega archivos desde `storage/app/public`.
+
+### 4) Reset PWA/SW (obligatorio tras cambios de rutas)
+
+1. DevTools > Application > Service Workers > `Unregister`.
+2. DevTools > Application > Storage > `Clear site data`.
+3. Hard refresh (`Ctrl+F5`).
+4. Reinstalar la PWA.

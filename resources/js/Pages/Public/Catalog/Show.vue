@@ -11,7 +11,12 @@ const currentImage = ref(0)
 const images = computed(() => props.product.images ?? [])
 
 function imageUrl(image) {
-  return image?.url ?? (image?.path ? `/storage/${image.path}` : null)
+  return image?.image_url ?? image?.url ?? (image?.path ? `/storage/${image.path}` : null)
+}
+
+function setPlaceholder(event) {
+  event.target.onerror = null
+  event.target.src = '/images/product-placeholder.svg'
 }
 
 function money(v) {
@@ -92,6 +97,7 @@ onBeforeUnmount(() => {
               v-if="images.length && imageUrl(images[currentImage])"
               :src="imageUrl(images[currentImage])"
               :alt="product.name"
+              @error="setPlaceholder"
               class="h-full w-full object-cover transition duration-300"
             />
             <div v-else class="flex h-full items-center justify-center">
@@ -111,7 +117,7 @@ onBeforeUnmount(() => {
               :class="idx === currentImage ? 'border-zinc-900 opacity-100' : 'border-transparent opacity-60 hover:opacity-100'"
               @click="currentImage = idx"
             >
-              <img :src="imageUrl(img)" :alt="product.name" class="h-full w-full object-cover" />
+              <img :src="imageUrl(img)" :alt="product.name" @error="setPlaceholder" class="h-full w-full object-cover" />
             </button>
           </div>
         </section>
