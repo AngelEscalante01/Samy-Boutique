@@ -1,6 +1,7 @@
 <script setup>
 import CheckoutModal from '@/Components/POS/CheckoutModal.vue';
 import ProductCard from '@/Components/POS/ProductCard.vue';
+import VariantSelectorModal from '@/Components/POS/VariantSelectorModal.vue';
 import {
     downloadSnapshot,
     fetchSnapshotMeta,
@@ -105,6 +106,9 @@ const lastSnapshotAt = computed(() => snapshotMeta.value?.generated_at ?? null);
 
 // ── Tabs móvil ────────────────────────────────────────────────────────────────
 const mobileTab = ref('products');
+
+const variantSelectorOpen = ref(false);
+const selectedProductForVariant = ref(null);
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 const toast        = ref(null); // { text, type }
@@ -281,18 +285,97 @@ onBeforeUnmount(() => {
 // ── Carrito ───────────────────────────────────────────────────────────────────
 const cart = ref([]);
 
-function addToCart(product) {
+function addToCart(product, variant, qty = 1) {
     if (!canCreateSale.value) { showToast('Sin permiso para registrar ventas.', 'error'); return; }
-    if (cart.value.some((i) => i.product.id === product.id)) {
-        showToast('Este producto ya está en el carrito.', 'error');
+    if (!variant || Number(variant.stock ?? 0) <= 0) {
+        showToast('La variante seleccionada no tiene stock.', 'error');
         return;
     }
-    cart.value.push({ product, discount_type: null, discount_value: null });
+
+    const safeQty = Math.max(1, Number(qty ?? 1));
+    const stock = Number(variant.stock ?? 0);
+    const existing = cart.value.find((item) => item.variant.id === variant.id);
+
+    if (existing) {
+        existing.qty = Math.min(stock, existing.qty + safeQty);
+        if (existing.qty >= stock) {
+            showToast('Cantidad ajustada al stock disponible.', 'error');
+        }
+    } else {
+        cart.value.push({
+            product,
+            variant,
+            qty: Math.min(stock, safeQty),
+            discount_type: null,
+            discount_value: null,
+        });
+    }
+
     if (mobileTab.value === 'products') uiMessage.value = `"${product.name}" agregado.`;
 }
 
-function removeFromCart(productId) {
-    cart.value = cart.value.filter((i) => i.product.id !== productId);
+function openVariantSelector(product) {
+    if (!canCreateSale.value) {
+        showToast('Sin permiso para registrar ventas.', 'error');
+        return;
+    }
+
+    const hasStock = (product?.variants ?? []).some((variant) => Number(variant?.stock ?? 0) > 0);
+    if (!hasStock) {
+        showToast('Este producto no tiene variantes disponibles.', 'error');
+        return;
+    }
+
+    selectedProductForVariant.value = product;
+    variantSelectorOpen.value = true;
+}
+
+function closeVariantSelector() {
+    variantSelectorOpen.value = false;
+    selectedProductForVariant.value = null;
+}
+
+function onVariantConfirm({ variant, qty }) {
+    if (!selectedProductForVariant.value) return;
+    addToCart(selectedProductForVariant.value, variant, qty);
+    closeVariantSelector();
+}
+
+function removeFromCart(variantId) {
+    cart.value = cart.value.filter((i) => i.variant.id !== variantId);
+}
+
+function incrementQty(variantId) {
+    const item = cart.value.find((row) => row.variant.id === variantId);
+    if (!item) return;
+    const maxStock = Number(item.variant.stock ?? 0);
+    if (item.qty >= maxStock) {
+        showToast('No puedes exceder el stock disponible.', 'error');
+        return;
+    }
+    item.qty += 1;
+}
+
+function decrementQty(variantId) {
+    const item = cart.value.find((row) => row.variant.id === variantId);
+    if (!item) return;
+    if (item.qty <= 1) return;
+    item.qty -= 1;
+}
+
+function setQty(variantId, nextQty) {
+    const item = cart.value.find((row) => row.variant.id === variantId);
+    if (!item) return;
+
+    const stock = Number(item.variant.stock ?? 0);
+    const parsed = Number(nextQty ?? 1);
+    const clamped = Math.max(1, Math.min(stock, Number.isFinite(parsed) ? parsed : 1));
+
+    if (parsed > stock) {
+        showToast('No puedes exceder el stock disponible.', 'error');
+    }
+
+    item.qty = clamped;
 }
 
 function clearCart() {
@@ -306,7 +389,7 @@ function clearCart() {
     clearCustomer();
 }
 
-const isInCart = (product) => cart.value.some((i) => i.product.id === product.id);
+const isInCartVariant = (variantId) => cart.value.some((i) => i.variant.id === variantId);
 
 // ── Descuentos globales ───────────────────────────────────────────────────────
 const globalDiscountType  = ref(null);
@@ -374,14 +457,21 @@ function computeDiscountAmount(base, type, value) {
 }
 
 const subtotal = computed(() =>
-    Number(cart.value.reduce((a, i) => a + Number(i.product.sale_price ?? 0), 0).toFixed(2)),
+    Number(
+        cart.value
+            .reduce((a, i) => a + (Number(i.variant?.sale_price_effective ?? i.product.sale_price ?? 0) * Number(i.qty ?? 1)), 0)
+            .toFixed(2),
+    ),
 );
 
 const itemDiscountTotal = computed(() => {
     if (!canDiscount.value) return 0;
     return Number(
         cart.value
-            .reduce((a, i) => a + computeDiscountAmount(i.product.sale_price, i.discount_type, i.discount_value), 0)
+            .reduce((a, i) => {
+                const lineBase = Number(i.variant?.sale_price_effective ?? i.product.sale_price ?? 0) * Number(i.qty ?? 1);
+                return a + computeDiscountAmount(lineBase, i.discount_type, i.discount_value);
+            }, 0)
             .toFixed(2),
     );
 });
@@ -417,7 +507,10 @@ const total = computed(() => {
 
 function buildSalePayload(payments = [], customerId = null) {
     const items = cart.value.map((item) => {
-        const p = { product_id: item.product.id };
+        const p = {
+            variant_id: item.variant.id,
+            qty: Number(item.qty ?? 1),
+        };
         if (canDiscount.value && item.discount_type && Number(item.discount_value ?? 0) > 0) {
             p.discount_type  = item.discount_type;
             p.discount_value = Number(item.discount_value);
@@ -464,7 +557,7 @@ async function applyCouponPreview() {
 }
 
 watch(
-    () => [couponCode.value, globalDiscountType.value, globalDiscountValue.value, cart.value.map((i) => [i.product.id, i.discount_type, i.discount_value])],
+    () => [couponCode.value, globalDiscountType.value, globalDiscountValue.value, cart.value.map((i) => [i.variant.id, i.qty, i.discount_type, i.discount_value])],
     () => { previewTotals.value = null; couponApplied.value = false; previewError.value = ''; },
     { deep: true },
 );
@@ -494,7 +587,7 @@ async function onCheckoutConfirm({ payments }) {
 
     if (isOffline.value) {
         try {
-            const soldSkus = cart.value.map((item) => item.product?.sku).filter(Boolean);
+            const soldSkus = cart.value.map((item) => item.variant?.sku || item.product?.sku).filter(Boolean);
 
             await queueSale(payload, { skus: soldSkus });
             checkoutOpen.value = false;
@@ -701,8 +794,8 @@ async function onCheckoutConfirm({ payments }) {
                         v-for="product in displayedProducts"
                         :key="product.id"
                         :product="product"
-                        :in-cart="isInCart(product)"
-                        @add="addToCart(product)"
+                        :in-cart-variant-ids="cart.map((item) => item.variant.id)"
+                        @select="() => openVariantSelector(product)"
                     />
                 </div>
                 <div v-else class="flex flex-col items-center justify-center gap-3 py-20 text-center text-gray-400">
@@ -765,7 +858,7 @@ async function onCheckoutConfirm({ payments }) {
 
                 <div
                     v-for="item in cart"
-                    :key="item.product.id"
+                    :key="item.variant.id"
                     class="rounded-xl border border-stone-200 bg-stone-50 p-3"
                 >
                     <div class="flex gap-3">
@@ -789,20 +882,39 @@ async function onCheckoutConfirm({ payments }) {
                                 <div class="min-w-0">
                                     <p class="truncate text-xs text-gray-400">{{ item.product.sku }}</p>
                                     <p class="truncate text-sm font-semibold text-gray-900">{{ item.product.name }}</p>
-                                    <p class="text-xs text-gray-500">{{ item.product.size?.name ?? '—' }} · {{ item.product.color?.name ?? '—' }}</p>
+                                    <p class="text-xs text-gray-500">{{ item.variant.size?.name ?? '—' }} · {{ item.variant.color?.name ?? '—' }}</p>
                                 </div>
                                 <button
                                     type="button"
                                     class="ml-1 shrink-0 text-gray-300 hover:text-red-500"
-                                    @click="removeFromCart(item.product.id)"
+                                    @click="removeFromCart(item.variant.id)"
                                     title="Quitar"
                                 >
                                     <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
                                 </button>
                             </div>
                             <div class="mt-1 flex items-center justify-between text-sm">
-                                <span class="text-gray-400 text-xs">Precio</span>
-                                <span class="font-bold text-gray-900">{{ money(item.product.sale_price) }}</span>
+                                <span class="text-gray-400 text-xs">Precio unitario</span>
+                                <span class="font-bold text-gray-900">{{ money(item.variant.sale_price_effective) }}</span>
+                            </div>
+                            <div class="mt-1 flex items-center justify-between text-xs text-gray-500">
+                                <span>Cantidad</span>
+                                <div class="inline-flex items-center gap-2">
+                                    <button type="button" class="rounded border border-stone-200 px-2 py-0.5" @click="decrementQty(item.variant.id)">-</button>
+                                    <input
+                                        :value="item.qty"
+                                        type="number"
+                                        min="1"
+                                        :max="item.variant.stock"
+                                        class="w-14 rounded border border-stone-200 px-1 py-0.5 text-center"
+                                        @input="setQty(item.variant.id, Number($event.target.value))"
+                                    >
+                                    <button type="button" class="rounded border border-stone-200 px-2 py-0.5" @click="incrementQty(item.variant.id)">+</button>
+                                </div>
+                            </div>
+                            <div class="mt-1 flex items-center justify-between text-xs text-gray-500">
+                                <span>Stock disponible</span>
+                                <span>{{ item.variant.stock }}</span>
                             </div>
                         </div>
                     </div>
@@ -970,5 +1082,13 @@ async function onCheckoutConfirm({ payments }) {
         :errors="form.errors"
         @close="checkoutOpen = false"
         @confirm="onCheckoutConfirm"
+    />
+
+    <VariantSelectorModal
+        :open="variantSelectorOpen"
+        :product="selectedProductForVariant"
+        :in-cart-variant-ids="cart.map((item) => item.variant.id)"
+        @close="closeVariantSelector"
+        @confirm="onVariantConfirm"
     />
 </template>

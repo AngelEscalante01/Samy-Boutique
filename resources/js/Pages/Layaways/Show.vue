@@ -129,11 +129,12 @@ function submitCancel() { cancelForm.post(route('layaways.cancel', props.layaway
                 <p class="text-sm font-semibold text-gray-800">{{ item.name }}</p>
                 <p class="text-xs text-gray-400 mt-0.5">
                   <span v-if="item.sku" class="font-mono">{{ item.sku }}</span>
-                  <span v-if="item.product?.size"> · {{ item.product.size.name }}</span>
-                  <span v-if="item.product?.color"> / {{ item.product.color.name }}</span>
+                  <span v-if="item.variant?.size"> · {{ item.variant.size.name }}</span>
+                  <span v-if="item.variant?.color"> / {{ item.variant.color.name }}</span>
+                  <span> · x{{ item.qty ?? item.quantity ?? 1 }}</span>
                 </p>
               </div>
-              <span class="text-sm font-bold text-gray-900 flex-shrink-0">${{ money(item.unit_price) }}</span>
+              <span class="text-sm font-bold text-gray-900 flex-shrink-0">${{ money((item.unit_price || 0) * (item.qty ?? item.quantity ?? 1)) }}</span>
             </li>
           </ul>
         </div>

@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Actions\Sales\CreateSaleAction;
 use App\Http\Requests\StoreSaleRequest;
-use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Models\SyncReceipt;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -109,26 +109,31 @@ class SyncSalesController extends Controller
 
     private function detectConflictsFromPayload(array $payload): array
     {
-        $productIds = collect(Arr::get($payload, 'items', []))
-            ->pluck('product_id')
+        $variantIds = collect(Arr::get($payload, 'items', []))
+            ->pluck('variant_id')
             ->filter()
             ->map(fn ($id) => (int) $id)
             ->unique()
             ->values();
 
-        if ($productIds->isEmpty()) {
+        if ($variantIds->isEmpty()) {
             return [];
         }
 
-        return Product::query()
-            ->whereIn('id', $productIds)
-            ->where('status', '!=', 'disponible')
-            ->get(['id', 'sku', 'name', 'status'])
-            ->map(fn ($product) => [
-                'id' => $product->id,
-                'sku' => $product->sku,
-                'name' => $product->name,
-                'status' => $product->status,
+        return ProductVariant::query()
+            ->whereIn('id', $variantIds)
+            ->where(function ($query) {
+                $query->where('active', false)
+                    ->orWhere('stock', '<=', 0);
+            })
+            ->with('product:id,name')
+            ->get(['id', 'sku', 'product_id', 'stock', 'active'])
+            ->map(fn ($variant) => [
+                'id' => $variant->id,
+                'sku' => $variant->sku,
+                'name' => $variant->product?->name,
+                'active' => (bool) $variant->active,
+                'stock' => (int) $variant->stock,
             ])
             ->values()
             ->all();

@@ -1,302 +1,404 @@
 <script setup>
-import ImageUploader from '@/Components/Forms/ImageUploader.vue';
-import { Head, Link, router, useForm } from '@inertiajs/vue3';
-import { computed, ref } from 'vue';
+import ImageUploader from '@/Components/Forms/ImageUploader.vue'
+import UIButton from '@/Components/UI/Button.vue'
+import UICard from '@/Components/UI/Card.vue'
+import UIInput from '@/Components/UI/Input.vue'
+import UISelect from '@/Components/UI/Select.vue'
+import { Head, Link, router, useForm } from '@inertiajs/vue3'
+import { computed, ref } from 'vue'
 
 const props = defineProps({
-    product:    { type: Object, required: true },
-    categories: { type: Array,  required: true },
-    sizes:      { type: Array,  required: true },
-    colors:     { type: Array,  required: true },
-    can: {
-        type: Object,
-        default: () => ({ viewPurchasePrice: false, deleteImages: false }),
-    },
-});
-
-const uploaderRef = ref(null);
+  product: { type: Object, required: true },
+  categories: { type: Array, required: true },
+  sizes: { type: Array, required: true },
+  colors: { type: Array, required: true },
+  can: {
+    type: Object,
+    default: () => ({ viewPurchasePrice: false, deleteImages: false }),
+  },
+})
 
 const form = useForm({
-    sku:            props.product.sku             ?? '',
-    name:           props.product.name            ?? '',
-    description:    props.product.description     ?? '',
-    category_id:    props.product.category?.id   ?? '',
-    gender:         props.product.gender          ?? 'unisex',
-    size_id:        props.product.size?.id        ?? '',
-    color_id:       props.product.color?.id       ?? '',
-    purchase_price: props.product.purchase_price  ?? '',
-    sale_price:     props.product.sale_price      ?? '',
-    status:         props.product.status          ?? 'disponible',
-    sold_at:        props.product.sold_at         ?? null,
-    images:         [],
-});
+  sku: props.product.sku ?? '',
+  name: props.product.name ?? '',
+  description: props.product.description ?? '',
+  category_id: props.product.category?.id ?? '',
+  gender: props.product.gender ?? 'unisex',
+  sale_price_base: props.product.sale_price_base ?? '',
+  status: props.product.status ?? 'disponible',
+  sold_at: props.product.sold_at ?? null,
+  images: [],
+  variants: (props.product.variants ?? []).map((variant) => ({
+    id: variant.id,
+    size_id: Number(variant.size?.id ?? variant.size_id),
+    color_id: Number(variant.color?.id ?? variant.color_id),
+    stock: Number(variant.stock ?? 0),
+    purchase_price: variant.purchase_price ?? null,
+    sale_price: variant.sale_price ?? null,
+  })),
+})
+
+const variantDraft = ref({
+  size_id: '',
+  color_id: '',
+  stock: '',
+  purchase_price: '',
+  sale_price: '',
+})
+
+const editingIndex = ref(null)
+const variantError = ref('')
+
+const existingImages = computed(() => props.product.images ?? [])
+
+const totalStock = computed(() =>
+  form.variants.reduce((sum, variant) => sum + Number(variant.stock || 0), 0),
+)
 
 function onImagesChange(files) {
-    form.images = files;
+  form.images = files
 }
-
-const existingImages = computed(() => props.product.images ?? []);
 
 function deleteImage(img) {
-    if (!confirm('Eliminar esta imagen permanentemente?')) return;
-    router.delete(
-        route('products.images.destroy', { product: props.product.id, productImage: img.id }),
-        { preserveScroll: true },
-    );
-}
-
-const profit = computed(() => {
-    const sp = Number(form.sale_price     || 0);
-    const pp = Number(form.purchase_price || 0);
-    if (!sp || !pp) return null;
-    const g = sp - pp;
-    return { amount: g, pct: Math.round((g / pp) * 100) };
-});
-
-function submit() {
-    form
-        .transform((data) => ({
-            ...data,
-            _method: 'put',
-        }))
-        .post(route('products.update', props.product.id), { forceFormData: true });
-}
-
-function money(n) {
-    return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(n ?? 0);
+  if (!confirm('Eliminar esta imagen permanentemente?')) return
+  router.delete(route('products.images.destroy', { product: props.product.id, productImage: img.id }), {
+    preserveScroll: true,
+  })
 }
 
 function imgUrl(img) {
-    return img?.url ?? (img?.path ? `/storage/${img.path}` : null);
+  return img?.url ?? (img?.path ? `/storage/${img.path}` : null)
 }
 
-const inputCls = 'mt-1 block w-full rounded-lg border-gray-200 py-2 text-sm shadow-sm focus:border-gray-400 focus:ring-1 focus:ring-gray-400';
+function money(value) {
+  return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(value ?? 0)
+}
+
+function sizeName(sizeId) {
+  return props.sizes.find((size) => Number(size.id) === Number(sizeId))?.name ?? '—'
+}
+
+function colorName(colorId) {
+  return props.colors.find((color) => Number(color.id) === Number(colorId))?.name ?? '—'
+}
+
+function resetVariantDraft() {
+  variantDraft.value = {
+    size_id: '',
+    color_id: '',
+    stock: '',
+    purchase_price: '',
+    sale_price: '',
+  }
+  editingIndex.value = null
+}
+
+function variantPayloadFromDraft(existingId = null) {
+  return {
+    id: existingId,
+    size_id: Number(variantDraft.value.size_id),
+    color_id: Number(variantDraft.value.color_id),
+    stock: Number(variantDraft.value.stock),
+    purchase_price:
+      variantDraft.value.purchase_price === '' || variantDraft.value.purchase_price === null
+        ? null
+        : Number(variantDraft.value.purchase_price),
+    sale_price:
+      variantDraft.value.sale_price === '' || variantDraft.value.sale_price === null
+        ? null
+        : Number(variantDraft.value.sale_price),
+  }
+}
+
+function canUseCombination(sizeId, colorId, ignoreIndex = null) {
+  return !form.variants.some((variant, index) =>
+    index !== ignoreIndex
+    && Number(variant.size_id) === Number(sizeId)
+    && Number(variant.color_id) === Number(colorId),
+  )
+}
+
+function addOrUpdateVariant() {
+  variantError.value = ''
+
+  if (!variantDraft.value.size_id || !variantDraft.value.color_id) {
+    variantError.value = 'Selecciona talla y color para la variante.'
+    return
+  }
+
+  if (!variantDraft.value.stock || Number(variantDraft.value.stock) <= 0) {
+    variantError.value = 'El stock debe ser mayor a 0.'
+    return
+  }
+
+  const current = editingIndex.value !== null ? form.variants[editingIndex.value] : null
+  const nextVariant = variantPayloadFromDraft(current?.id ?? null)
+
+  if (!canUseCombination(nextVariant.size_id, nextVariant.color_id, editingIndex.value)) {
+    variantError.value = 'La combinación talla/color ya existe.'
+    return
+  }
+
+  if (editingIndex.value === null) {
+    form.variants.push(nextVariant)
+  } else {
+    form.variants.splice(editingIndex.value, 1, nextVariant)
+  }
+
+  resetVariantDraft()
+}
+
+function editVariant(index) {
+  const variant = form.variants[index]
+  editingIndex.value = index
+  variantDraft.value = {
+    size_id: String(variant.size_id),
+    color_id: String(variant.color_id),
+    stock: String(variant.stock),
+    purchase_price: variant.purchase_price ?? '',
+    sale_price: variant.sale_price ?? '',
+  }
+  variantError.value = ''
+}
+
+function removeVariant(index) {
+  form.variants.splice(index, 1)
+  if (editingIndex.value === index) {
+    resetVariantDraft()
+  }
+}
+
+function submit() {
+  variantError.value = ''
+
+  if (form.variants.length === 0) {
+    variantError.value = 'El producto debe conservar al menos una variante.'
+    return
+  }
+
+  form
+    .transform((data) => ({
+      ...data,
+      _method: 'put',
+    }))
+    .post(route('products.update', props.product.id), { forceFormData: true })
+}
 </script>
 
 <template>
-    <Head title="Editar producto" />
+  <Head title="Editar producto" />
 
-    <div class="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-            <h1 class="text-xl font-black text-gray-900">Editar producto</h1>
-            <p class="text-xs text-gray-400 mt-0.5">{{ product.sku }} - {{ product.name }}</p>
-        </div>
-        <Link
-            :href="route('products.index')"
-            class="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-50"
-        >
-            <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="15 18 9 12 15 6"/>
-            </svg>
-            Volver
-        </Link>
+  <div class="mb-6 flex flex-wrap items-start justify-between gap-3">
+    <div>
+      <h1 class="text-xl font-semibold tracking-wide text-stone-900">Editar producto modelo</h1>
+      <p class="mt-0.5 text-sm text-stone-400">{{ product.sku }} - {{ product.name }}</p>
     </div>
+    <Link :href="route('products.index')">
+      <UIButton variant="secondary" size="sm">Volver</UIButton>
+    </Link>
+  </div>
 
-    <form @submit.prevent="submit">
-        <div class="grid grid-cols-1 gap-6 lg:grid-cols-3">
+  <form @submit.prevent="submit" class="space-y-6">
+    <UICard>
+      <template #header>
+        <h2 class="text-xs font-semibold uppercase tracking-widest text-stone-400">Datos del producto</h2>
+      </template>
 
-            <div class="lg:col-span-2 space-y-5">
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <UIInput
+          v-model="form.name"
+          label="Nombre"
+          required
+          placeholder="Ej. Vestido corte midi"
+          :error="form.errors.name"
+        />
 
-                <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
-                    <h2 class="mb-4 text-sm font-bold uppercase tracking-wide text-gray-400">Identificacion</h2>
-                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <div>
-                            <label class="text-xs font-semibold text-gray-700">SKU</label>
-                            <input v-model="form.sku" type="text" :class="inputCls" />
-                            <p v-if="form.errors.sku" class="mt-1 text-xs text-red-600">{{ form.errors.sku }}</p>
-                        </div>
-                        <div>
-                            <label class="text-xs font-semibold text-gray-700">Nombre <span class="text-red-500">*</span></label>
-                            <input v-model="form.name" type="text" :class="inputCls" />
-                            <p v-if="form.errors.name" class="mt-1 text-xs text-red-600">{{ form.errors.name }}</p>
-                        </div>
-                        <div class="sm:col-span-2">
-                            <label class="text-xs font-semibold text-gray-700">Descripcion</label>
-                            <textarea v-model="form.description" rows="3" :class="inputCls" />
-                            <p v-if="form.errors.description" class="mt-1 text-xs text-red-600">{{ form.errors.description }}</p>
-                        </div>
-                    </div>
-                </div>
+        <UIInput
+          v-model="form.sku"
+          label="SKU modelo (opcional)"
+          placeholder="Se autogenera si lo dejas vacío"
+          :error="form.errors.sku"
+        />
 
-                <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
-                    <h2 class="mb-4 text-sm font-bold uppercase tracking-wide text-gray-400">Clasificacion</h2>
-                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <div>
-                            <label class="text-xs font-semibold text-gray-700">Categoria <span class="text-red-500">*</span></label>
-                            <select v-model="form.category_id" :class="inputCls">
-                                <option value="" disabled>Selecciona...</option>
-                                <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
-                            </select>
-                            <p v-if="form.errors.category_id" class="mt-1 text-xs text-red-600">{{ form.errors.category_id }}</p>
-                        </div>
-                        <div>
-                            <label class="text-xs font-semibold text-gray-700">Genero <span class="text-red-500">*</span></label>
-                            <select v-model="form.gender" :class="inputCls">
-                                <option value="dama">Dama</option>
-                                <option value="caballero">Caballero</option>
-                                <option value="unisex">Unisex</option>
-                            </select>
-                            <p v-if="form.errors.gender" class="mt-1 text-xs text-red-600">{{ form.errors.gender }}</p>
-                        </div>
-                        <div>
-                            <label class="text-xs font-semibold text-gray-700">Talla <span class="text-red-500">*</span></label>
-                            <select v-model="form.size_id" :class="inputCls">
-                                <option value="" disabled>Selecciona...</option>
-                                <option v-for="s in sizes" :key="s.id" :value="s.id">{{ s.name }}</option>
-                            </select>
-                            <p v-if="form.errors.size_id" class="mt-1 text-xs text-red-600">{{ form.errors.size_id }}</p>
-                        </div>
-                        <div>
-                            <label class="text-xs font-semibold text-gray-700">Color <span class="text-red-500">*</span></label>
-                            <select v-model="form.color_id" :class="inputCls">
-                                <option value="" disabled>Selecciona...</option>
-                                <option v-for="c in colors" :key="c.id" :value="c.id">{{ c.name }}</option>
-                            </select>
-                            <p v-if="form.errors.color_id" class="mt-1 text-xs text-red-600">{{ form.errors.color_id }}</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
-                    <h2 class="mb-4 text-sm font-bold uppercase tracking-wide text-gray-400">Precios</h2>
-                    <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <div v-if="can.viewPurchasePrice">
-                            <label class="text-xs font-semibold text-gray-700">Precio compra <span class="text-red-500">*</span></label>
-                            <div class="relative mt-1">
-                                <span class="absolute inset-y-0 left-3 flex items-center text-sm text-gray-400">$</span>
-                                <input v-model="form.purchase_price" type="number" step="0.01" min="0" class="block w-full rounded-lg border-gray-200 py-2 pl-7 text-sm shadow-sm focus:border-gray-400 focus:ring-1 focus:ring-gray-400" />
-                            </div>
-                            <p v-if="form.errors.purchase_price" class="mt-1 text-xs text-red-600">{{ form.errors.purchase_price }}</p>
-                        </div>
-                        <div>
-                            <label class="text-xs font-semibold text-gray-700">Precio venta <span class="text-red-500">*</span></label>
-                            <div class="relative mt-1">
-                                <span class="absolute inset-y-0 left-3 flex items-center text-sm text-gray-400">$</span>
-                                <input v-model="form.sale_price" type="number" step="0.01" min="0" class="block w-full rounded-lg border-gray-200 py-2 pl-7 text-sm shadow-sm focus:border-gray-400 focus:ring-1 focus:ring-gray-400" />
-                            </div>
-                            <p v-if="form.errors.sale_price" class="mt-1 text-xs text-red-600">{{ form.errors.sale_price }}</p>
-                        </div>
-                        <div v-if="can.viewPurchasePrice && profit" class="sm:col-span-2 flex items-center gap-3 rounded-xl bg-gray-50 px-4 py-3">
-                            <div>
-                                <p class="text-xs text-gray-500">Ganancia estimada</p>
-                                <p class="text-lg font-black" :class="profit.amount >= 0 ? 'text-emerald-600' : 'text-red-600'">
-                                    {{ money(profit.amount) }}
-                                    <span class="text-sm font-bold">({{ profit.pct }}%)</span>
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
-                    <h2 class="mb-3 text-sm font-bold uppercase tracking-wide text-gray-400">
-                        Fotos actuales
-                        <span class="ml-1 font-normal text-gray-400">({{ existingImages.length }})</span>
-                    </h2>
-                    <div v-if="existingImages.length" class="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
-                        <div
-                            v-for="img in existingImages"
-                            :key="img.id"
-                            class="group relative overflow-hidden rounded-xl border border-gray-100"
-                        >
-                            <img
-                                v-if="imgUrl(img)"
-                                :src="imgUrl(img)"
-                                :alt="product.name"
-                                class="aspect-square w-full object-cover"
-                            />
-                            <div v-else class="aspect-square bg-gray-100" />
-                            <button
-                                v-if="can.deleteImages"
-                                type="button"
-                                class="absolute inset-0 flex items-center justify-center bg-red-900/60 opacity-0 transition-opacity group-hover:opacity-100"
-                                @click="deleteImage(img)"
-                            >
-                                <span class="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white">Eliminar</span>
-                            </button>
-                        </div>
-                    </div>
-                    <p v-else class="rounded-xl bg-gray-50 py-6 text-center text-sm text-gray-400">Sin imagenes aun</p>
-                </div>
-
-                <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
-                    <h2 class="mb-3 text-sm font-bold uppercase tracking-wide text-gray-400">Agregar mas fotos</h2>
-                    <ImageUploader
-                        ref="uploaderRef"
-                        :max="10"
-                        :error="form.errors.images || form.errors['images.0']"
-                        @change="onImagesChange"
-                    />
-                </div>
-            </div>
-
-            <div class="space-y-5">
-
-                <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
-                    <h2 class="mb-3 text-sm font-bold uppercase tracking-wide text-gray-400">Estado del producto</h2>
-                    <div class="grid grid-cols-1 gap-1.5">
-                        <button
-                            v-for="s in ['disponible', 'apartado', 'vendido', 'cancelado']"
-                            :key="s"
-                            type="button"
-                            class="flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-semibold capitalize transition-all"
-                            :class="form.status === s
-                                ? 'border-gray-900 bg-gray-900 text-white'
-                                : 'border-gray-200 text-gray-600 hover:bg-gray-50'"
-                            @click="form.status = s"
-                        >
-                            <span
-                                class="h-2.5 w-2.5 rounded-full"
-                                :class="{
-                                    'bg-emerald-400': s === 'disponible' && form.status !== s,
-                                    'bg-amber-400':   s === 'apartado'   && form.status !== s,
-                                    'bg-gray-400':    s === 'vendido'    && form.status !== s,
-                                    'bg-red-400':     s === 'cancelado'  && form.status !== s,
-                                    'bg-white':       form.status === s,
-                                }"
-                            />
-                            {{ s }}
-                        </button>
-                    </div>
-                    <p v-if="form.errors.status" class="mt-1 text-xs text-red-600">{{ form.errors.status }}</p>
-                </div>
-
-                <div class="rounded-xl border border-dashed border-gray-200 bg-gray-50 p-5 space-y-2 text-sm">
-                    <p class="text-xs font-bold uppercase tracking-wide text-gray-400">Resumen</p>
-                    <div class="flex justify-between text-gray-600">
-                        <span>Precio venta</span>
-                        <span class="font-black text-gray-900">{{ money(form.sale_price) }}</span>
-                    </div>
-                    <div v-if="can.viewPurchasePrice && form.purchase_price" class="flex justify-between text-gray-600">
-                        <span>Precio compra</span>
-                        <span class="font-medium text-gray-700">{{ money(form.purchase_price) }}</span>
-                    </div>
-                    <div v-if="can.viewPurchasePrice && profit" class="flex justify-between border-t border-gray-200 pt-2">
-                        <span class="text-gray-500">Ganancia</span>
-                        <span class="font-black" :class="profit.amount >= 0 ? 'text-emerald-600' : 'text-red-600'">
-                            {{ money(profit.amount) }}
-                        </span>
-                    </div>
-                </div>
-
-                <div class="flex flex-col gap-2">
-                    <button
-                        type="submit"
-                        :disabled="form.processing"
-                        class="w-full rounded-xl bg-gray-900 py-3 text-sm font-bold text-white hover:bg-gray-700 disabled:opacity-50"
-                    >
-                        <span v-if="form.processing" class="flex items-center justify-center gap-2">
-                            <svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0"/></svg>
-                            Guardando...
-                        </span>
-                        <span v-else>Guardar cambios</span>
-                    </button>
-                    <Link
-                        :href="route('products.index')"
-                        class="w-full rounded-xl border border-gray-200 py-3 text-center text-sm font-semibold text-gray-600 hover:bg-gray-50"
-                    >Cancelar</Link>
-                </div>
-            </div>
+        <div class="sm:col-span-2 flex flex-col gap-1">
+          <label class="text-xs font-semibold text-stone-700">Descripción</label>
+          <textarea
+            v-model="form.description"
+            rows="3"
+            class="block w-full rounded-xl border border-stone-300 py-2 px-3 text-sm text-stone-800
+                   bg-white placeholder:text-stone-400 transition duration-200
+                   focus:outline-none focus:ring-2 focus:ring-amber-300/60 focus:border-amber-400"
+            placeholder="Descripción del modelo"
+          />
+          <p v-if="form.errors.description" class="text-xs text-red-500">{{ form.errors.description }}</p>
         </div>
-    </form>
+
+        <UISelect
+          v-model="form.category_id"
+          label="Categoría"
+          required
+          :error="form.errors.category_id"
+        >
+          <option value="" disabled>Selecciona...</option>
+          <option v-for="category in categories" :key="category.id" :value="category.id">{{ category.name }}</option>
+        </UISelect>
+
+        <UISelect
+          v-model="form.gender"
+          label="Género"
+          required
+          :error="form.errors.gender"
+        >
+          <option value="dama">Dama</option>
+          <option value="caballero">Caballero</option>
+          <option value="unisex">Unisex</option>
+        </UISelect>
+
+        <UIInput
+          v-model="form.sale_price_base"
+          label="Precio venta base (opcional)"
+          type="number"
+          placeholder="0.00"
+          :error="form.errors.sale_price_base"
+        />
+      </div>
+    </UICard>
+
+    <UICard>
+      <template #header>
+        <h2 class="text-xs font-semibold uppercase tracking-widest text-stone-400">Imágenes del modelo</h2>
+      </template>
+
+      <div class="mb-4">
+        <p class="mb-2 text-xs font-semibold uppercase tracking-widest text-stone-400">
+          Actuales ({{ existingImages.length }})
+        </p>
+        <div v-if="existingImages.length" class="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
+          <div
+            v-for="img in existingImages"
+            :key="img.id"
+            class="group relative overflow-hidden rounded-xl border border-stone-100"
+          >
+            <img
+              v-if="imgUrl(img)"
+              :src="imgUrl(img)"
+              :alt="product.name"
+              class="aspect-square w-full object-cover"
+            />
+            <div v-else class="aspect-square bg-stone-100" />
+            <button
+              v-if="can.deleteImages"
+              type="button"
+              class="absolute inset-0 flex items-center justify-center bg-red-900/60 opacity-0 transition-opacity group-hover:opacity-100"
+              @click="deleteImage(img)"
+            >
+              <span class="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white">Eliminar</span>
+            </button>
+          </div>
+        </div>
+        <p v-else class="rounded-xl bg-stone-50 py-4 text-center text-sm text-stone-400">Sin imágenes aún</p>
+      </div>
+
+      <ImageUploader
+        :max="10"
+        :error="form.errors.images || form.errors['images.0']"
+        @change="onImagesChange"
+      />
+    </UICard>
+
+    <UICard>
+      <template #header>
+        <div class="flex items-center justify-between gap-3">
+          <h2 class="text-xs font-semibold uppercase tracking-widest text-stone-400">Variantes</h2>
+          <p class="text-xs font-semibold text-stone-500">Stock total: {{ totalStock }}</p>
+        </div>
+      </template>
+
+      <div class="grid grid-cols-1 gap-3 md:grid-cols-5">
+        <UISelect v-model="variantDraft.color_id" label="Color">
+          <option value="" disabled>Selecciona...</option>
+          <option v-for="color in colors" :key="color.id" :value="String(color.id)">{{ color.name }}</option>
+        </UISelect>
+
+        <UISelect v-model="variantDraft.size_id" label="Talla">
+          <option value="" disabled>Selecciona...</option>
+          <option v-for="size in sizes" :key="size.id" :value="String(size.id)">{{ size.name }}</option>
+        </UISelect>
+
+        <UIInput
+          v-model="variantDraft.stock"
+          type="number"
+          label="Stock"
+          placeholder="1"
+        />
+
+        <UIInput
+          v-if="can.viewPurchasePrice"
+          v-model="variantDraft.purchase_price"
+          type="number"
+          label="Precio compra (opc.)"
+          placeholder="0.00"
+        />
+
+        <UIInput
+          v-model="variantDraft.sale_price"
+          type="number"
+          label="Precio venta (opc.)"
+          placeholder="0.00"
+        />
+      </div>
+
+      <div class="mt-3 flex flex-wrap items-center gap-2">
+        <UIButton type="button" @click="addOrUpdateVariant">
+          {{ editingIndex === null ? 'Agregar variante' : 'Actualizar variante' }}
+        </UIButton>
+        <UIButton v-if="editingIndex !== null" type="button" variant="secondary" @click="resetVariantDraft">
+          Cancelar edición
+        </UIButton>
+      </div>
+
+      <p v-if="variantError" class="mt-2 text-xs text-red-500">{{ variantError }}</p>
+      <p v-if="form.errors.variants" class="mt-2 text-xs text-red-500">{{ form.errors.variants }}</p>
+
+      <div class="mt-4 overflow-x-auto rounded-xl border border-stone-200">
+        <table class="min-w-full divide-y divide-stone-200 text-sm">
+          <thead class="bg-stone-50 text-left text-xs font-semibold uppercase tracking-widest text-stone-500">
+            <tr>
+              <th class="px-3 py-2">Color</th>
+              <th class="px-3 py-2">Talla</th>
+              <th class="px-3 py-2">Stock</th>
+              <th class="px-3 py-2">Precio venta</th>
+              <th class="px-3 py-2">Precio compra</th>
+              <th class="px-3 py-2 text-right">Acciones</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-stone-100 bg-white">
+            <tr v-for="(variant, index) in form.variants" :key="variant.id ?? `${variant.color_id}-${variant.size_id}-${index}`">
+              <td class="px-3 py-2">{{ colorName(variant.color_id) }}</td>
+              <td class="px-3 py-2">{{ sizeName(variant.size_id) }}</td>
+              <td class="px-3 py-2 font-semibold text-stone-700">{{ variant.stock }}</td>
+              <td class="px-3 py-2">{{ variant.sale_price == null ? '—' : money(variant.sale_price) }}</td>
+              <td class="px-3 py-2">{{ variant.purchase_price == null ? '—' : money(variant.purchase_price) }}</td>
+              <td class="px-3 py-2">
+                <div class="flex justify-end gap-2">
+                  <UIButton type="button" size="sm" variant="secondary" @click="editVariant(index)">Editar</UIButton>
+                  <UIButton type="button" size="sm" variant="danger" @click="removeVariant(index)">Eliminar</UIButton>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="form.variants.length === 0">
+              <td colspan="6" class="px-3 py-4 text-center text-stone-400">Sin variantes agregadas</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </UICard>
+
+    <div class="flex flex-wrap justify-end gap-2">
+      <Link :href="route('products.index')">
+        <UIButton type="button" variant="secondary">Cancelar</UIButton>
+      </Link>
+      <UIButton type="submit" :loading="form.processing">Guardar cambios</UIButton>
+    </div>
+  </form>
 </template>

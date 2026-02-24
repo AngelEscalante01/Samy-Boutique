@@ -8,7 +8,9 @@ use App\Http\Requests\CancelSaleRequest;
 use App\Http\Requests\PreviewSaleRequest;
 use App\Http\Requests\StoreSaleRequest;
 use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Models\Sale;
+use App\Services\InventoryService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -65,8 +67,8 @@ class SalesController extends Controller
             'payments',
             'coupon:id,code,discount_type,discount_value',
             'items.product.images',
-            'items.product.size',
-            'items.product.color',
+            'items.variant.size',
+            'items.variant.color',
             'canceledBy:id,name',
         ]);
 
@@ -78,16 +80,16 @@ class SalesController extends Controller
         ]);
     }
 
-    public function cancel(Sale $sale, CancelSaleRequest $request)
+    public function cancel(Sale $sale, CancelSaleRequest $request, InventoryService $inventoryService)
     {
         abort_unless($request->user()->can('sales.cancel.sale', $sale), 403);
 
-        DB::transaction(function () use ($sale, $request) {
+        DB::transaction(function () use ($sale, $request, $inventoryService) {
             /** @var Sale $lockedSale */
             $lockedSale = Sale::query()
                 ->whereKey($sale->id)
                 ->lockForUpdate()
-                ->with('items:id,sale_id,product_id')
+                ->with('items:id,sale_id,product_id,product_variant_id,qty,quantity')
                 ->firstOrFail();
 
             if ($lockedSale->status === 'cancelled' || $lockedSale->canceled_at !== null) {
@@ -116,13 +118,48 @@ class SalesController extends Controller
             ]);
 
             if ($data['inventory_action'] === 'regresar_disponible') {
-                Product::query()
-                    ->whereIn('id', $lockedSale->items->pluck('product_id')->all())
-                    ->where('status', 'vendido')
-                    ->update([
-                        'status' => 'disponible',
-                        'sold_at' => null,
-                    ]);
+                $variantIds = $lockedSale->items
+                    ->pluck('product_variant_id')
+                    ->filter()
+                    ->map(fn ($id) => (int) $id)
+                    ->unique()
+                    ->values();
+
+                if ($variantIds->isNotEmpty()) {
+                    $variants = ProductVariant::query()
+                        ->whereIn('id', $variantIds)
+                        ->lockForUpdate()
+                        ->get()
+                        ->keyBy('id');
+
+                    foreach ($lockedSale->items as $item) {
+                        $variantId = (int) ($item->product_variant_id ?? 0);
+                        if ($variantId <= 0) {
+                            continue;
+                        }
+
+                        $variant = $variants->get($variantId);
+                        if (! $variant) {
+                            continue;
+                        }
+
+                        $qty = (int) ($item->qty ?? $item->quantity ?? 1);
+                        $inventoryService->incrementVariantStock($variant, max(1, $qty));
+                    }
+
+                    $inventoryService->updateManySoldOutAt(
+                        $variants->pluck('product_id')->map(fn ($id) => (int) $id)
+                    );
+                } else {
+                    Product::query()
+                        ->whereIn('id', $lockedSale->items->pluck('product_id')->all())
+                        ->where('status', 'vendido')
+                        ->update([
+                            'status' => 'disponible',
+                            'sold_at' => null,
+                            'sold_out_at' => null,
+                        ]);
+                }
             }
 
             if ($data['inventory_action'] === 'marcar_danado') {

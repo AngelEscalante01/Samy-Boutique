@@ -7,13 +7,14 @@ use App\Models\Category;
 use App\Models\Color;
 use App\Models\Product;
 use App\Models\Size;
+use App\Services\InventoryService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class PublicCatalogController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request, InventoryService $inventoryService): Response
     {
         $q = trim((string) $request->query('q', ''));
         $gender = trim((string) $request->query('gender', ''));
@@ -24,13 +25,33 @@ class PublicCatalogController extends Controller
         $perPage = 12;
 
         $productsQuery = Product::query()
-            ->where('status', 'disponible')
-            ->with(['images', 'category', 'size', 'color'])
+            ->with([
+                'images',
+                'category',
+                'variants' => fn ($query) => $query
+                    ->where('active', true)
+                    ->where('stock', '>', 0)
+                    ->with(['size', 'color']),
+            ])
+            ->whereHas('variants', fn ($query) => $query
+                ->where('active', true)
+                ->where('stock', '>', 0))
             ->when($q !== '', fn ($query) => $query->search($q))
             ->when(in_array($gender, ['dama', 'caballero', 'unisex'], true), fn ($query) => $query->byGender($gender))
             ->when($categoryId > 0, fn ($query) => $query->where('category_id', $categoryId))
-            ->when($sizeId > 0, fn ($query) => $query->where('size_id', $sizeId))
-            ->when($colorId > 0, fn ($query) => $query->where('color_id', $colorId));
+            ->tap(fn ($query) => $inventoryService->scopeSellableProducts($query))
+            ->when($sizeId > 0, function ($query) use ($sizeId) {
+                $query->whereHas('variants', fn ($variantQuery) => $variantQuery
+                    ->where('active', true)
+                    ->where('stock', '>', 0)
+                    ->where('size_id', $sizeId));
+            })
+            ->when($colorId > 0, function ($query) use ($colorId) {
+                $query->whereHas('variants', fn ($variantQuery) => $variantQuery
+                    ->where('active', true)
+                    ->where('stock', '>', 0)
+                    ->where('color_id', $colorId));
+            });
 
         if ($sort === 'price_asc') {
             $productsQuery->orderBy('sale_price');
@@ -62,9 +83,21 @@ class PublicCatalogController extends Controller
 
     public function show(Product $product): Response
     {
-        abort_if($product->status !== 'disponible', 404);
+        $hasSellableVariants = $product->variants()
+            ->where('active', true)
+            ->where('stock', '>', 0)
+            ->exists();
 
-        $product->load(['images', 'category', 'size', 'color']);
+        abort_unless($hasSellableVariants, 404);
+
+        $product->load([
+            'images',
+            'category',
+            'variants' => fn ($query) => $query
+                ->where('active', true)
+                ->where('stock', '>', 0)
+                ->with(['size', 'color']),
+        ]);
 
         return Inertia::render('Public/Catalog/Show', [
             'product' => (new ProductResource($product))->resolve(),

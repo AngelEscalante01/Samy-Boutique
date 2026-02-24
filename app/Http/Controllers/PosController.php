@@ -6,6 +6,7 @@ use App\Http\Resources\ProductResource;
 use App\Models\Category;
 use App\Models\Customer;
 use App\Models\Product;
+use App\Services\InventoryService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -13,18 +14,25 @@ use Inertia\Response;
 
 class PosController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request, InventoryService $inventoryService): Response
     {
         $q          = (string) $request->query('q', '');
         $gender     = (string) $request->query('gender', '');
         $categoryId = (int)    $request->query('category_id', 0);
 
         $products = Product::query()
-            ->available()
             ->search($q)
             ->when($gender !== '', fn ($query) => $query->byGender($gender))
             ->when($categoryId > 0, fn ($query) => $query->where('category_id', $categoryId))
-            ->with(['size', 'color', 'category', 'images'])
+            ->tap(fn ($query) => $inventoryService->scopeSellableProducts($query))
+            ->with([
+                'category',
+                'images',
+                'variants' => fn ($query) => $query
+                    ->where('active', true)
+                    ->where('stock', '>', 0)
+                    ->with(['size', 'color']),
+            ])
             ->orderByDesc('id')
             ->paginate(24)
             ->withQueryString();

@@ -1,10 +1,39 @@
 <script setup>
-defineProps({
-    product: { type: Object, required: true },
-    inCart:  { type: Boolean, default: false },
-});
+import { computed } from 'vue'
 
-defineEmits(['add']);
+const emit = defineEmits(['select'])
+
+const props = defineProps({
+    product: { type: Object, required: true },
+    inCartVariantIds: { type: Array, default: () => [] },
+})
+
+const availableVariants = computed(() =>
+    (props.product?.variants ?? []).filter((variant) => Number(variant?.stock ?? 0) > 0),
+)
+
+const isAnyVariantInCart = computed(() =>
+    availableVariants.value.some((variant) => props.inCartVariantIds.includes(variant.id)),
+)
+
+const priceLabel = computed(() => {
+    const prices = availableVariants.value
+        .map((variant) => Number(variant?.sale_price_effective ?? 0))
+        .filter((price) => Number.isFinite(price) && price > 0)
+
+    if (!prices.length) {
+        return money(props.product?.sale_price ?? props.product?.sale_price_base ?? 0)
+    }
+
+    const min = Math.min(...prices)
+    const max = Math.max(...prices)
+
+    if (min === max) {
+        return money(min)
+    }
+
+    return `Desde ${money(min)}`
+})
 
 function imageUrl(product) {
     const first = product?.images?.[0];
@@ -20,15 +49,20 @@ function setPlaceholder(event) {
 function money(v) {
     return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(v ?? 0);
 }
+
+function selectProduct() {
+    if (!availableVariants.value.length) return
+    emit('select', props.product)
+}
 </script>
 
 <template>
     <div
         class="group relative flex flex-col overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-100 transition-shadow hover:shadow-md"
-        :class="inCart ? 'ring-gray-900 ring-2' : ''"
+        :class="isAnyVariantInCart ? 'ring-gray-900 ring-2' : ''"
     >
         <!-- Badge "En carrito" -->
-        <div v-if="inCart" class="absolute left-2 top-2 z-10 rounded-full bg-gray-900 px-2 py-0.5 text-xs font-bold text-white shadow">
+        <div v-if="isAnyVariantInCart" class="absolute left-2 top-2 z-10 rounded-full bg-gray-900 px-2 py-0.5 text-xs font-bold text-white shadow">
             En carrito
         </div>
 
@@ -57,32 +91,26 @@ function money(v) {
                 <p class="truncate text-sm font-semibold leading-tight text-gray-900">{{ product.name }}</p>
             </div>
 
-            <!-- Chips talla + color -->
+            <!-- Variantes -->
             <div class="flex flex-wrap gap-1">
-                <span v-if="product.size?.name" class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-                    {{ product.size.name }}
-                </span>
-                <span v-if="product.color?.name" class="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-                    {{ product.color.name }}
-                </span>
                 <span v-if="product.category?.name" class="rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-600">
                     {{ product.category.name }}
                 </span>
             </div>
 
-            <!-- Price + Agregar -->
+            <!-- Price + Seleccionar -->
             <div class="mt-auto flex items-center justify-between gap-2">
-                <span class="text-base font-bold text-gray-900">{{ money(product.sale_price) }}</span>
+                <span class="text-base font-bold text-gray-900">{{ priceLabel }}</span>
                 <button
                     type="button"
                     class="rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors"
-                    :class="inCart
-                        ? 'cursor-default bg-gray-100 text-gray-400'
-                        : 'bg-gray-900 text-white hover:bg-gray-700'"
-                    :disabled="inCart"
-                    @click="!inCart && $emit('add')"
+                    :class="availableVariants.length
+                        ? 'bg-gray-900 text-white hover:bg-gray-700'
+                        : 'cursor-not-allowed bg-gray-100 text-gray-400'"
+                    :disabled="!availableVariants.length"
+                    @click="selectProduct"
                 >
-                    {{ inCart ? 'Agregado' : 'Agregar' }}
+                    {{ availableVariants.length ? 'Seleccionar' : 'Sin stock' }}
                 </button>
             </div>
         </div>

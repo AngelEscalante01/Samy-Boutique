@@ -3,6 +3,7 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Contracts\Console\Kernel as ConsoleKernel;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -12,6 +13,9 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withCommands([
         __DIR__.'/../app/Console/Commands',
+    ])
+    ->withSingletons([
+        ConsoleKernel::class => \App\Console\Kernel::class,
     ])
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->web(append: [

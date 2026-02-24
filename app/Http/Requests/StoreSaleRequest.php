@@ -17,7 +17,8 @@ class StoreSaleRequest extends FormRequest
             'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
 
             'items' => ['required', 'array', 'min:1', 'max:50'],
-            'items.*.product_id' => ['required', 'integer', 'exists:products,id', 'distinct'],
+            'items.*.variant_id' => ['required', 'integer', 'exists:product_variants,id', 'distinct'],
+            'items.*.qty' => ['required', 'integer', 'min:1'],
             // Descuento manual por item
             'items.*.discount_type' => ['nullable', 'string', 'in:amount,percent'],
             'items.*.discount_value' => ['nullable', 'numeric', 'min:0', 'required_with:items.*.discount_type'],

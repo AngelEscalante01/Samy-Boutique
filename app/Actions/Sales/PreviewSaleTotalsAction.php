@@ -5,14 +5,19 @@ namespace App\Actions\Sales;
 use App\Models\Coupon;
 use App\Models\CouponRedemption;
 use App\Models\Customer;
-use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\InventoryService;
 use Illuminate\Support\Arr;
 use Illuminate\Validation\ValidationException;
 
 class PreviewSaleTotalsAction
 {
+    public function __construct(private readonly InventoryService $inventoryService)
+    {
+    }
+
     /**
      * Calcula totales de una venta sin persistir.
      * Devuelve: subtotal, discount_total, coupon_discount_total, total.
@@ -21,35 +26,38 @@ class PreviewSaleTotalsAction
     {
         $itemsPayload = Arr::get($payload, 'items', []);
 
-        $productIds = collect($itemsPayload)
-            ->pluck('product_id')
+        $variantIds = collect($itemsPayload)
+            ->pluck('variant_id')
             ->map(fn ($id) => (int) $id)
             ->unique()
             ->values();
 
-        if ($productIds->isEmpty()) {
+        if ($variantIds->isEmpty()) {
             throw ValidationException::withMessages([
                 'items' => ['El carrito está vacío.'],
             ]);
         }
 
-        $products = Product::query()
-            ->whereIn('id', $productIds)
-            ->with('images')
+        $variants = ProductVariant::query()
+            ->whereIn('id', $variantIds)
+            ->with('product')
             ->get()
             ->keyBy('id');
 
-        if ($products->count() !== $productIds->count()) {
+        if ($variants->count() !== $variantIds->count()) {
             throw ValidationException::withMessages([
-                'items' => ['Uno o más productos no existen.'],
+                'items' => ['Una o más variantes no existen.'],
             ]);
         }
 
-        foreach ($productIds as $productId) {
-            $product = $products->get($productId);
-            if (! $product || $product->status !== 'disponible') {
+        foreach ($itemsPayload as $item) {
+            $variantId = (int) $item['variant_id'];
+            $qty = max(1, (int) ($item['qty'] ?? 1));
+            $variant = $variants->get($variantId);
+
+            if (! $variant || ! $variant->active || (int) $variant->stock < $qty) {
                 throw ValidationException::withMessages([
-                    'items' => ["El producto {$productId} no está disponible."],
+                    'items' => ["La variante {$variantId} no tiene stock suficiente."],
                 ]);
             }
         }
@@ -60,11 +68,12 @@ class PreviewSaleTotalsAction
         $discountTotal = '0.00';
 
         foreach ($itemsPayload as $item) {
-            $productId = (int) $item['product_id'];
-            $product = $products->get($productId);
+            $variantId = (int) $item['variant_id'];
+            $qty = max(1, (int) ($item['qty'] ?? 1));
+            $variant = $variants->get($variantId);
 
-            $unitPrice = (string) $product->sale_price;
-            $lineBase = (float) $unitPrice;
+            $unitPrice = $this->inventoryService->effectiveSalePrice($variant);
+            $lineBase = $unitPrice * $qty;
 
             [$itemDiscountAmount] = $this->computeDiscount(
                 $lineBase,

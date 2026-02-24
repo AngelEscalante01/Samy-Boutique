@@ -7,6 +7,7 @@ use App\Models\Layaway;
 use App\Models\LayawayItem;
 use App\Models\LayawayPayment;
 use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\SalePayment;
@@ -19,6 +20,10 @@ use Illuminate\Validation\ValidationException;
 
 class LayawayService
 {
+    public function __construct(private readonly InventoryService $inventoryService)
+    {
+    }
+
     public function create(array $payload, User $user): Layaway
     {
         return DB::transaction(function () use ($payload, $user) {
@@ -26,13 +31,13 @@ class LayawayService
             $customerId = $customerId !== null ? (int) $customerId : null;
 
             $itemsPayload = Arr::get($payload, 'items', []);
-            $productIds = collect($itemsPayload)
-                ->pluck('product_id')
+            $variantIds = collect($itemsPayload)
+                ->pluck('variant_id')
                 ->map(fn ($id) => (int) $id)
                 ->unique()
                 ->values();
 
-            if ($productIds->isEmpty()) {
+            if ($variantIds->isEmpty()) {
                 throw ValidationException::withMessages([
                     'items' => ['El carrito está vacío.'],
                 ]);
@@ -43,32 +48,38 @@ class LayawayService
                 $customer = Customer::query()->lockForUpdate()->findOrFail($customerId);
             }
 
-            $products = Product::query()
-                ->whereIn('id', $productIds)
+            $variants = ProductVariant::query()
+                ->whereIn('id', $variantIds)
                 ->lockForUpdate()
-                ->with('images')
+                ->with('product')
                 ->get()
                 ->keyBy('id');
 
-            if ($products->count() !== $productIds->count()) {
+            if ($variants->count() !== $variantIds->count()) {
                 throw ValidationException::withMessages([
-                    'items' => ['Uno o más productos no existen.'],
+                    'items' => ['Una o más variantes no existen.'],
                 ]);
             }
 
-            foreach ($productIds as $productId) {
-                $product = $products->get($productId);
-                if (! $product || $product->status !== 'disponible') {
+            foreach ($itemsPayload as $item) {
+                $variantId = (int) $item['variant_id'];
+                $qty = max(1, (int) ($item['qty'] ?? 1));
+                $variant = $variants->get($variantId);
+
+                if (! $variant || ! $variant->active || (int) $variant->stock < $qty) {
                     throw ValidationException::withMessages([
-                        'items' => ["El producto {$productId} no está disponible para apartado."],
+                        'items' => ["La variante {$variantId} no tiene stock suficiente para apartado."],
                     ]);
                 }
             }
 
             $subtotal = '0.00';
-            foreach ($productIds as $productId) {
-                $product = $products->get($productId);
-                $subtotal = bcadd($subtotal, (string) $product->sale_price, 2);
+            foreach ($itemsPayload as $item) {
+                $variant = $variants->get((int) $item['variant_id']);
+                $qty = max(1, (int) ($item['qty'] ?? 1));
+                $unitPrice = $this->inventoryService->effectiveSalePrice($variant);
+                $lineTotal = $unitPrice * $qty;
+                $subtotal = bcadd($subtotal, number_format($lineTotal, 2, '.', ''), 2);
             }
 
             $layaway = Layaway::create([
@@ -79,22 +90,31 @@ class LayawayService
                 'paid_total' => '0.00',
             ]);
 
-            foreach ($productIds as $productId) {
-                $product = $products->get($productId);
+            foreach ($itemsPayload as $item) {
+                /** @var ProductVariant $variant */
+                $variant = $variants->get((int) $item['variant_id']);
+                /** @var Product $product */
+                $product = $variant->product;
+                $qty = max(1, (int) ($item['qty'] ?? 1));
+                $unitPrice = number_format($this->inventoryService->effectiveSalePrice($variant), 2, '.', '');
 
                 LayawayItem::create([
                     'layaway_id' => $layaway->id,
                     'product_id' => $product->id,
-                    'quantity' => 1,
-                    'sku' => $product->sku,
+                    'product_variant_id' => $variant->id,
+                    'quantity' => $qty,
+                    'qty' => $qty,
+                    'sku' => $variant->sku ?: $product->sku,
                     'name' => $product->name,
-                    'unit_price' => (string) $product->sale_price,
+                    'unit_price' => $unitPrice,
                 ]);
 
-                $product->update([
-                    'status' => 'apartado',
-                ]);
+                $this->inventoryService->decrementVariantStock($variant, $qty);
             }
+
+            $this->inventoryService->updateManySoldOutAt(
+                $variants->pluck('product_id')->map(fn ($id) => (int) $id)
+            );
 
             // Pago inicial opcional
             $paymentsPayload = Arr::get($payload, 'payments', []);
@@ -102,7 +122,7 @@ class LayawayService
                 $this->addPaymentInternal($layaway, $payment);
             }
 
-            return $layaway->fresh(['items.product', 'payments', 'customer', 'creator']);
+            return $layaway->fresh(['items.product', 'items.variant.size', 'items.variant.color', 'payments', 'customer', 'creator']);
         });
     }
 
@@ -136,27 +156,39 @@ class LayawayService
                 ]);
             }
 
-            $productIds = $locked->items->pluck('product_id')->all();
+            $variantIds = $locked->items
+                ->pluck('product_variant_id')
+                ->filter()
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->values();
 
-            $products = Product::query()
-                ->whereIn('id', $productIds)
+            $variants = ProductVariant::query()
+                ->whereIn('id', $variantIds)
                 ->lockForUpdate()
                 ->get()
                 ->keyBy('id');
 
-            foreach ($productIds as $productId) {
-                $product = $products->get($productId);
-                if ($product && $product->status === 'apartado') {
-                    $product->update(['status' => 'disponible']);
+            foreach ($locked->items as $item) {
+                $variant = $variants->get((int) ($item->product_variant_id ?? 0));
+                if (! $variant) {
+                    continue;
                 }
+
+                $qty = max(1, (int) ($item->qty ?? $item->quantity ?? 1));
+                $this->inventoryService->incrementVariantStock($variant, $qty);
             }
+
+            $this->inventoryService->updateManySoldOutAt(
+                $variants->pluck('product_id')->map(fn ($id) => (int) $id)
+            );
 
             $locked->update([
                 'status' => 'cancelled',
                 'cancelled_at' => now(),
             ]);
 
-            return $locked->fresh(['items.product', 'payments', 'customer', 'creator']);
+            return $locked->fresh(['items.product', 'items.variant.size', 'items.variant.color', 'payments', 'customer', 'creator']);
         });
     }
 
@@ -189,23 +221,19 @@ class LayawayService
                 $customer = Customer::query()->lockForUpdate()->find($locked->customer_id);
             }
 
-            $productIds = $locked->items->pluck('product_id')->all();
+            $variantIds = $locked->items
+                ->pluck('product_variant_id')
+                ->filter()
+                ->map(fn ($id) => (int) $id)
+                ->unique()
+                ->values();
 
-            $products = Product::query()
-                ->whereIn('id', $productIds)
+            $variants = ProductVariant::query()
+                ->whereIn('id', $variantIds)
                 ->lockForUpdate()
-                ->with('images')
+                ->with('product.images')
                 ->get()
                 ->keyBy('id');
-
-            foreach ($productIds as $productId) {
-                $product = $products->get($productId);
-                if (! $product || $product->status !== 'apartado') {
-                    throw ValidationException::withMessages([
-                        'items' => ["El producto {$productId} no está en estado apartado."],
-                    ]);
-                }
-            }
 
             $subtotal = (float) $locked->subtotal;
             $paidTotal = (float) $locked->paid_total;
@@ -276,19 +304,26 @@ class LayawayService
 
             // Items de la venta
             foreach ($locked->items as $item) {
-                $product = $products->get($item->product_id);
+                $variant = $variants->get((int) ($item->product_variant_id ?? 0));
+                $product = $variant?->product;
+                $qty = max(1, (int) ($item->qty ?? $item->quantity ?? 1));
+                $lineTotal = number_format((float) $item->unit_price * $qty, 2, '.', '');
 
                 SaleItem::create([
                     'sale_id' => $sale->id,
-                    'product_id' => $product->id,
-                    'quantity' => 1,
+                    'product_id' => $item->product_id,
+                    'product_variant_id' => $item->product_variant_id,
+                    'quantity' => $qty,
+                    'qty' => $qty,
                     'sku' => $item->sku,
                     'name' => $item->name,
                     'unit_price' => (string) $item->unit_price,
                     'discount_type' => null,
                     'discount_value' => null,
                     'discount_amount' => '0.00',
-                    'line_total' => (string) $item->unit_price,
+                    'discount' => '0.00',
+                    'line_total' => $lineTotal,
+                    'final_price' => $lineTotal,
                 ]);
             }
 
@@ -322,21 +357,9 @@ class LayawayService
                 ]);
             }
 
-            // Finalizar: marcar productos vendidos
-            foreach ($productIds as $productId) {
-                $product = $products->get($productId);
-                $product->update([
-                    'status' => 'vendido',
-                    'sold_at' => now(),
-                ]);
-
-                if (config('samy.delete_images_on_sale', false)) {
-                    foreach ($product->images as $image) {
-                        Storage::disk('public')->delete($image->path);
-                        $image->delete();
-                    }
-                }
-            }
+            $this->inventoryService->updateManySoldOutAt(
+                $variants->pluck('product_id')->map(fn ($id) => (int) $id)
+            );
 
             // Actualiza layaway
             $locked->update([

@@ -10,11 +10,14 @@ use App\Models\Category;
 use App\Models\Color;
 use App\Models\Product;
 use App\Models\ProductImage;
+use App\Models\ProductVariant;
 use App\Models\Size;
+use App\Services\InventoryService;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -75,7 +78,7 @@ class ProductController extends Controller
 
     public function edit(Product $product, Request $request): Response
     {
-        $product->load(['category', 'size', 'color', 'images']);
+        $product->load(['category', 'size', 'color', 'images', 'variants.size', 'variants.color']);
         $user = $request->user();
 
         return Inertia::render('Products/Edit', [
@@ -90,25 +93,64 @@ class ProductController extends Controller
         ]);
     }
 
-    public function store(StoreProductRequest $request, StoreProductImagesAction $storeProductImages): RedirectResponse
+    public function store(
+        StoreProductRequest $request,
+        StoreProductImagesAction $storeProductImages,
+        InventoryService $inventoryService
+    ): RedirectResponse
     {
         $validated = $request->validated();
+        $variantsPayload = collect($validated['variants'] ?? []);
 
-        $product = DB::transaction(function () use ($request, $validated, $storeProductImages) {
+        $this->assertUniqueVariantCombinations($variantsPayload);
+
+        $primaryVariant = $variantsPayload->first();
+        $modelSku = $validated['sku'] ?? $this->generateSku((string) $validated['name']);
+        $modelPurchasePrice = $primaryVariant['purchase_price'] ?? $validated['purchase_price'] ?? 0;
+        $modelSalePrice = $primaryVariant['sale_price'] ?? $validated['sale_price_base'] ?? $validated['sale_price'] ?? 0;
+        $status = $validated['status'] ?? 'disponible';
+
+        $product = DB::transaction(function () use (
+            $request,
+            $validated,
+            $variantsPayload,
+            $storeProductImages,
+            $inventoryService,
+            $primaryVariant,
+            $modelSku,
+            $modelPurchasePrice,
+            $modelSalePrice,
+            $status
+        ) {
             $product = Product::create([
-                'sku' => $validated['sku'],
+                'sku' => $modelSku,
                 'name' => $validated['name'],
                 'description' => $validated['description'] ?? null,
                 'category_id' => $validated['category_id'],
                 'gender' => $validated['gender'],
-                'size_id' => $validated['size_id'],
-                'color_id' => $validated['color_id'],
-                'purchase_price' => $validated['purchase_price'],
-                'sale_price' => $validated['sale_price'],
-                'status' => $validated['status'],
+                'size_id' => $primaryVariant['size_id'],
+                'color_id' => $primaryVariant['color_id'],
+                'purchase_price' => $modelPurchasePrice,
+                'sale_price' => $modelSalePrice,
+                'sale_price_base' => $validated['sale_price_base'] ?? null,
+                'status' => $status,
                 'created_by' => $request->user()->id,
                 'sold_at' => $validated['sold_at'] ?? null,
             ]);
+
+            foreach ($variantsPayload as $variantData) {
+                ProductVariant::query()->create([
+                    'product_id' => $product->id,
+                    'size_id' => $variantData['size_id'],
+                    'color_id' => $variantData['color_id'],
+                    'stock' => (int) $variantData['stock'],
+                    'purchase_price' => $variantData['purchase_price'] ?? null,
+                    'sale_price' => $variantData['sale_price'] ?? null,
+                    'active' => true,
+                ]);
+            }
+
+            $inventoryService->updateSoldOutAt($product->id);
 
             /** @var array<int, \Illuminate\Http\UploadedFile> $images */
             $images = $request->file('images', []);
@@ -122,24 +164,91 @@ class ProductController extends Controller
             ->with('success', 'Producto creado.');
     }
 
-    public function update(UpdateProductRequest $request, Product $product, StoreProductImagesAction $storeProductImages): RedirectResponse
+    public function update(
+        UpdateProductRequest $request,
+        Product $product,
+        StoreProductImagesAction $storeProductImages,
+        InventoryService $inventoryService
+    ): RedirectResponse
     {
         $validated = $request->validated();
+        $variantsPayload = collect($validated['variants'] ?? []);
 
-        DB::transaction(function () use ($request, $product, $validated, $storeProductImages) {
+        $this->assertUniqueVariantCombinations($variantsPayload);
+
+        $primaryVariant = $variantsPayload->first();
+        $modelSku = $validated['sku'] ?: $product->sku;
+        $modelPurchasePrice = $primaryVariant['purchase_price'] ?? $validated['purchase_price'] ?? $product->purchase_price;
+        $modelSalePrice = $primaryVariant['sale_price'] ?? $validated['sale_price_base'] ?? $validated['sale_price'] ?? $product->sale_price;
+        $status = $validated['status'] ?? $product->status;
+
+        DB::transaction(function () use (
+            $request,
+            $product,
+            $validated,
+            $variantsPayload,
+            $storeProductImages,
+            $inventoryService,
+            $primaryVariant,
+            $modelSku,
+            $modelPurchasePrice,
+            $modelSalePrice,
+            $status
+        ) {
             $product->update([
-                'sku' => $validated['sku'],
+                'sku' => $modelSku,
                 'name' => $validated['name'],
                 'description' => $validated['description'] ?? null,
                 'category_id' => $validated['category_id'],
                 'gender' => $validated['gender'],
-                'size_id' => $validated['size_id'],
-                'color_id' => $validated['color_id'],
-                'purchase_price' => $validated['purchase_price'],
-                'sale_price' => $validated['sale_price'],
-                'status' => $validated['status'],
+                'size_id' => $primaryVariant['size_id'],
+                'color_id' => $primaryVariant['color_id'],
+                'purchase_price' => $modelPurchasePrice,
+                'sale_price' => $modelSalePrice,
+                'sale_price_base' => $validated['sale_price_base'] ?? null,
+                'status' => $status,
                 'sold_at' => $validated['sold_at'] ?? null,
             ]);
+
+            $existingVariants = $product->variants()->get()->keyBy('id');
+            $incomingIds = [];
+
+            foreach ($variantsPayload as $variantData) {
+                $variantId = isset($variantData['id']) ? (int) $variantData['id'] : null;
+
+                if ($variantId !== null && $existingVariants->has($variantId)) {
+                    $incomingIds[] = $variantId;
+
+                    $existingVariants->get($variantId)?->update([
+                        'size_id' => $variantData['size_id'],
+                        'color_id' => $variantData['color_id'],
+                        'stock' => (int) $variantData['stock'],
+                        'purchase_price' => $variantData['purchase_price'] ?? null,
+                        'sale_price' => $variantData['sale_price'] ?? null,
+                        'active' => true,
+                    ]);
+
+                    continue;
+                }
+
+                $created = ProductVariant::query()->create([
+                    'product_id' => $product->id,
+                    'size_id' => $variantData['size_id'],
+                    'color_id' => $variantData['color_id'],
+                    'stock' => (int) $variantData['stock'],
+                    'purchase_price' => $variantData['purchase_price'] ?? null,
+                    'sale_price' => $variantData['sale_price'] ?? null,
+                    'active' => true,
+                ]);
+
+                $incomingIds[] = $created->id;
+            }
+
+            $product->variants()
+                ->whereNotIn('id', $incomingIds)
+                ->delete();
+
+            $inventoryService->updateSoldOutAt($product->id);
 
             /** @var array<int, \Illuminate\Http\UploadedFile> $images */
             $images = $request->file('images', []);
@@ -167,5 +276,32 @@ class ProductController extends Controller
         });
 
         return back()->with('success', 'Imagen eliminada.');
+    }
+
+    private function assertUniqueVariantCombinations($variantsPayload): void
+    {
+        $combinations = $variantsPayload
+            ->map(fn ($variant) => sprintf('%s-%s', $variant['size_id'], $variant['color_id']));
+
+        if ($combinations->count() !== $combinations->unique()->count()) {
+            throw ValidationException::withMessages([
+                'variants' => ['No puedes repetir la misma combinación talla/color.'],
+            ]);
+        }
+    }
+
+    private function generateSku(string $name): string
+    {
+        $base = preg_replace('/[^A-Z0-9]+/', '-', strtoupper(trim($name))) ?: 'MODEL';
+        $base = trim($base, '-');
+        $attempt = 1;
+
+        do {
+            $candidate = sprintf('%s-%04d', $base, $attempt);
+            $exists = Product::query()->where('sku', $candidate)->exists();
+            $attempt++;
+        } while ($exists);
+
+        return $candidate;
     }
 }

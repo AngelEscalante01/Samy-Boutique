@@ -6,11 +6,13 @@ use App\Models\Coupon;
 use App\Models\CouponRedemption;
 use App\Models\Customer;
 use App\Models\Product;
+use App\Models\ProductVariant;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\SalePayment;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\InventoryService;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -18,6 +20,10 @@ use Illuminate\Validation\ValidationException;
 
 class CreateSaleAction
 {
+    public function __construct(private readonly InventoryService $inventoryService)
+    {
+    }
+
     /**
      * Crea una venta completa.
      *
@@ -42,37 +48,40 @@ class CreateSaleAction
                 $customer = Customer::query()->lockForUpdate()->findOrFail($customerId);
             }
 
-            $productIds = collect($itemsPayload)
-                ->pluck('product_id')
+            $variantIds = collect($itemsPayload)
+                ->pluck('variant_id')
                 ->map(fn ($id) => (int) $id)
                 ->unique()
                 ->values();
 
-            if ($productIds->isEmpty()) {
+            if ($variantIds->isEmpty()) {
                 throw ValidationException::withMessages([
                     'items' => ['El carrito está vacío.'],
                 ]);
             }
 
             // Bloqueo para evitar doble venta concurrente
-            $products = Product::query()
-                ->whereIn('id', $productIds)
+            $variants = ProductVariant::query()
+                ->whereIn('id', $variantIds)
                 ->lockForUpdate()
-                ->with('images')
+                ->with(['product.images'])
                 ->get()
                 ->keyBy('id');
 
-            if ($products->count() !== $productIds->count()) {
+            if ($variants->count() !== $variantIds->count()) {
                 throw ValidationException::withMessages([
-                    'items' => ['Uno o más productos no existen.'],
+                    'items' => ['Una o más variantes no existen.'],
                 ]);
             }
 
-            foreach ($productIds as $productId) {
-                $product = $products->get($productId);
-                if (!$product || $product->status !== 'disponible') {
+            foreach ($itemsPayload as $item) {
+                $variantId = (int) $item['variant_id'];
+                $qty = (int) ($item['qty'] ?? 1);
+                $variant = $variants->get($variantId);
+
+                if (! $variant || ! $variant->active || (int) $variant->stock < $qty) {
                     throw ValidationException::withMessages([
-                        'items' => ["El producto {$productId} no está disponible."],
+                        'items' => ["La variante {$variantId} no tiene stock suficiente."],
                     ]);
                 }
             }
@@ -87,11 +96,17 @@ class CreateSaleAction
             $computedItems = [];
 
             foreach ($itemsPayload as $item) {
-                $productId = (int) $item['product_id'];
-                $product = $products->get($productId);
+                $variantId = (int) $item['variant_id'];
+                $qty = max(1, (int) ($item['qty'] ?? 1));
 
-                $unitPrice = (string) $product->sale_price;
-                $lineBase = (float) $unitPrice;
+                /** @var ProductVariant $variant */
+                $variant = $variants->get($variantId);
+                /** @var Product $product */
+                $product = $variant->product;
+
+                $unitPriceFloat = $this->inventoryService->effectiveSalePrice($variant);
+                $unitPrice = number_format($unitPriceFloat, 2, '.', '');
+                $lineBase = $unitPriceFloat * $qty;
 
                 [$itemDiscountAmount, $itemDiscountType, $itemDiscountValue] = $this->computeDiscount(
                     $lineBase,
@@ -106,6 +121,8 @@ class CreateSaleAction
 
                 $computedItems[] = [
                     'product' => $product,
+                    'variant' => $variant,
+                    'qty' => $qty,
                     'unit_price' => $unitPrice,
                     'discount_type' => $itemDiscountType,
                     'discount_value' => $itemDiscountValue,
@@ -256,18 +273,24 @@ class CreateSaleAction
             foreach ($computedItems as $computed) {
                 /** @var Product $product */
                 $product = $computed['product'];
+                /** @var ProductVariant $variant */
+                $variant = $computed['variant'];
 
                 SaleItem::create([
                     'sale_id' => $sale->id,
                     'product_id' => $product->id,
-                    'quantity' => 1,
-                    'sku' => $product->sku,
+                    'product_variant_id' => $variant->id,
+                    'quantity' => $computed['qty'],
+                    'qty' => $computed['qty'],
+                    'sku' => $variant->sku ?: $product->sku,
                     'name' => $product->name,
                     'unit_price' => $computed['unit_price'],
                     'discount_type' => $computed['discount_type'],
                     'discount_value' => $computed['discount_value'],
                     'discount_amount' => $computed['discount_amount'],
+                    'discount' => $computed['discount_amount'],
                     'line_total' => $computed['line_total'],
+                    'final_price' => $computed['line_total'],
                 ]);
             }
 
@@ -289,19 +312,28 @@ class CreateSaleAction
                 ]);
             }
 
-            // Finalizar: marcar productos vendidos + sold_at
+            // Finalizar: descontar stock por variante
             foreach ($computedItems as $computed) {
-                /** @var Product $product */
-                $product = $computed['product'];
-                $product->update([
-                    'status' => 'vendido',
-                    'sold_at' => now(),
-                ]);
+                /** @var ProductVariant $variant */
+                $variant = $computed['variant'];
+                $this->inventoryService->decrementVariantStock($variant, (int) $computed['qty']);
+            }
 
-                if (config('samy.delete_images_on_sale', false)) {
-                    foreach ($product->images as $image) {
-                        Storage::disk('public')->delete($image->path);
-                        $image->delete();
+            $this->inventoryService->updateManySoldOutAt(
+                collect($computedItems)->pluck('product.id')->map(fn ($id) => (int) $id)
+            );
+
+            if (config('samy.delete_images_on_sale', false)) {
+                $products = collect($computedItems)
+                    ->pluck('product')
+                    ->unique('id');
+
+                foreach ($products as $product) {
+                    if ($product->fresh()?->sold_out_at) {
+                        foreach ($product->images as $image) {
+                            Storage::disk('public')->delete($image->path);
+                            $image->delete();
+                        }
                     }
                 }
             }

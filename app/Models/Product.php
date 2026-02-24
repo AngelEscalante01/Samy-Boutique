@@ -26,16 +26,20 @@ class Product extends Model
         'color_id',
         'purchase_price',
         'sale_price',
+        'sale_price_base',
         'status',
         'created_by',
         'sold_at',
+        'sold_out_at',
     ];
 
     protected $casts = [
         // Mantiene precisión consistente al serializar.
         'purchase_price' => 'decimal:2',
         'sale_price' => 'decimal:2',
+        'sale_price_base' => 'decimal:2',
         'sold_at' => 'datetime',
+        'sold_out_at' => 'datetime',
     ];
 
     /**
@@ -66,6 +70,11 @@ class Product extends Model
         return $this->hasMany(ProductImage::class)
             ->whereNull('deleted_at')
             ->orderBy('sort');
+    }
+
+    public function variants(): HasMany
+    {
+        return $this->hasMany(ProductVariant::class);
     }
 
     /**

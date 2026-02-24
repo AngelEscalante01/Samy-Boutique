@@ -9,6 +9,7 @@ use App\Http\Resources\ProductResource;
 use App\Models\Customer;
 use App\Models\Layaway;
 use App\Models\Product;
+use App\Services\InventoryService;
 use App\Services\LayawayService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -53,11 +54,18 @@ class LayawayController extends Controller
         ]);
     }
 
-    public function create(): Response
+    public function create(InventoryService $inventoryService): Response
     {
         $products  = Product::query()
-            ->where('status', 'disponible')
-            ->with(['size', 'color', 'images', 'category'])
+            ->tap(fn ($query) => $inventoryService->scopeSellableProducts($query))
+            ->with([
+                'images',
+                'category',
+                'variants' => fn ($query) => $query
+                    ->where('active', true)
+                    ->where('stock', '>', 0)
+                    ->with(['size', 'color']),
+            ])
             ->orderBy('name')
             ->get();
 
@@ -74,7 +82,15 @@ class LayawayController extends Controller
     public function show(Layaway $layaway): Response
     {
         $user = request()->user();
-        $layaway->load(['items.product.size', 'items.product.color', 'items.product.images', 'payments', 'customer', 'creator', 'sale']);
+        $layaway->load([
+            'items.product.images',
+            'items.variant.size',
+            'items.variant.color',
+            'payments',
+            'customer',
+            'creator',
+            'sale',
+        ]);
 
         return Inertia::render('Layaways/Show', [
             'layaway' => $layaway,

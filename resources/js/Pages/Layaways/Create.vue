@@ -13,15 +13,33 @@ const filteredProducts = computed(() => {
   if (!q) return props.products
   return props.products.filter(p =>
     p.name.toLowerCase().includes(q) ||
-    (p.sku && p.sku.toLowerCase().includes(q))
+    (p.sku && p.sku.toLowerCase().includes(q)) ||
+    (p.variants || []).some(v => (v.sku || '').toLowerCase().includes(q))
   )
 })
 
 const cart = ref([])
-const inCartIds = computed(() => new Set(cart.value.map(i => i.id)))
-function addToCart(product) { if (!inCartIds.value.has(product.id)) cart.value.push(product) }
-function removeFromCart(id) { cart.value = cart.value.filter(i => i.id !== id) }
-const cartTotal = computed(() => cart.value.reduce((s, p) => s + Number(p.sale_price), 0).toFixed(2))
+const inCartIds = computed(() => new Set(cart.value.map(i => i.variant.id)))
+function firstVariantId(product) {
+  return (product.variants || []).find(v => Number(v.stock || 0) > 0)?.id ?? null
+}
+function addToCart(product) {
+  const variant = (product.variants || []).find(v => Number(v.stock || 0) > 0)
+  if (!variant) return
+  if (!inCartIds.value.has(variant.id)) cart.value.push({ product, variant, qty: 1 })
+}
+function removeFromCart(variantId) { cart.value = cart.value.filter(i => i.variant.id !== variantId) }
+function incQty(variantId) {
+  const item = cart.value.find(i => i.variant.id === variantId)
+  if (!item) return
+  if (item.qty < Number(item.variant.stock || 0)) item.qty += 1
+}
+function decQty(variantId) {
+  const item = cart.value.find(i => i.variant.id === variantId)
+  if (!item || item.qty <= 1) return
+  item.qty -= 1
+}
+const cartTotal = computed(() => cart.value.reduce((s, item) => s + (Number(item.variant.sale_price_effective || item.product.sale_price) * Number(item.qty || 1)), 0).toFixed(2))
 
 const customerQuery = ref('')
 const selectedCustomer = ref(null)
@@ -42,7 +60,7 @@ const form = useForm({ customer_id: null, items: [], payments: [] })
 
 function submit() {
   form.customer_id = selectedCustomer.value?.id ?? null
-  form.items = cart.value.map(p => ({ product_id: p.id }))
+  form.items = cart.value.map(item => ({ variant_id: item.variant.id, qty: Number(item.qty || 1) }))
   const amt = parseFloat(initialPaymentAmount.value)
   form.payments = (!isNaN(amt) && amt > 0) ? [{ method: initialPaymentMethod.value, amount: amt }] : []
   form.post(route('layaways.store'))
@@ -62,6 +80,10 @@ function storageBaseUrl() {
 function thumbUrl(product) {
   const img = product.images?.[0]
   return img?.url ?? (img?.path ? storageBaseUrl() + img.path : null)
+}
+
+function variantLabel(variant) {
+  return `${variant?.size?.name ?? 'Sin talla'} · ${variant?.color?.name ?? 'Sin color'} (${variant?.stock ?? 0})`
 }
 </script>
 
@@ -94,9 +116,9 @@ function thumbUrl(product) {
           <div v-if="filteredProducts.length === 0" class="py-10 text-center text-sm text-gray-400">Sin productos disponibles</div>
           <div v-else class="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[520px] overflow-y-auto pr-1">
             <button v-for="p in filteredProducts" :key="p.id" @click="addToCart(p)"
-              :disabled="inCartIds.has(p.id)"
+              :disabled="!firstVariantId(p) || inCartIds.has(firstVariantId(p))"
               class="relative flex flex-col rounded-xl border text-left transition focus:outline-none"
-              :class="inCartIds.has(p.id) ? 'border-emerald-300 bg-emerald-50 opacity-80 cursor-default' : 'border-gray-200 bg-white hover:border-gray-900 hover:shadow-sm'">
+              :class="inCartIds.has(firstVariantId(p)) ? 'border-emerald-300 bg-emerald-50 opacity-80 cursor-default' : 'border-gray-200 bg-white hover:border-gray-900 hover:shadow-sm'">
               <div class="aspect-square w-full overflow-hidden rounded-t-xl bg-gray-100">
                 <img v-if="thumbUrl(p)" :src="thumbUrl(p)" :alt="p.name" class="h-full w-full object-cover" />
                 <div v-else class="flex h-full items-center justify-center text-gray-300">
@@ -105,18 +127,15 @@ function thumbUrl(product) {
                   </svg>
                 </div>
               </div>
-              <div v-if="inCartIds.has(p.id)" class="absolute inset-0 flex items-center justify-center rounded-xl bg-emerald-600/20">
+              <div v-if="inCartIds.has(firstVariantId(p))" class="absolute inset-0 flex items-center justify-center rounded-xl bg-emerald-600/20">
                 <svg class="h-8 w-8 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                 </svg>
               </div>
               <div class="p-2 space-y-0.5">
                 <p class="text-xs font-semibold text-gray-800 line-clamp-2 leading-tight">{{ p.name }}</p>
-                <div class="flex flex-wrap gap-1 mt-1">
-                  <span v-if="p.size" class="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">{{ p.size.name }}</span>
-                  <span v-if="p.color" class="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">{{ p.color.name }}</span>
-                </div>
-                <p class="text-sm font-bold text-gray-900 mt-1">${{ money(p.sale_price) }}</p>
+                <p class="mt-1 text-xs text-gray-500 line-clamp-2">{{ variantLabel((p.variants || [])[0]) }}</p>
+                <p class="text-sm font-bold text-gray-900 mt-1">${{ money((p.variants || [])[0]?.sale_price_effective ?? p.sale_price) }}</p>
               </div>
             </button>
           </div>
@@ -161,20 +180,21 @@ function thumbUrl(product) {
           <p v-if="form.errors.items" class="text-xs text-red-600">{{ form.errors.items }}</p>
           <div v-if="cart.length === 0" class="py-6 text-center text-sm text-gray-400">Agrega productos desde la lista</div>
           <ul v-else class="divide-y divide-gray-100 max-h-60 overflow-y-auto">
-            <li v-for="item in cart" :key="item.id" class="flex items-center gap-3 py-2">
+            <li v-for="item in cart" :key="item.variant.id" class="flex items-center gap-3 py-2">
               <div class="h-10 w-10 flex-shrink-0 overflow-hidden rounded-lg bg-gray-100">
-                <img v-if="thumbUrl(item)" :src="thumbUrl(item)" :alt="item.name" class="h-full w-full object-cover" />
+                <img v-if="thumbUrl(item.product)" :src="thumbUrl(item.product)" :alt="item.product.name" class="h-full w-full object-cover" />
               </div>
               <div class="min-w-0 flex-1">
-                <p class="text-xs font-medium text-gray-800 truncate">{{ item.name }}</p>
-                <p class="text-xs text-gray-400">
-                  <span v-if="item.size">{{ item.size.name }}</span>
-                  <span v-if="item.size && item.color"> · </span>
-                  <span v-if="item.color">{{ item.color.name }}</span>
-                </p>
+                <p class="text-xs font-medium text-gray-800 truncate">{{ item.product.name }}</p>
+                <p class="text-xs text-gray-400">{{ item.variant.size?.name }} · {{ item.variant.color?.name }}</p>
+                <div class="mt-1 inline-flex items-center gap-2 text-xs">
+                  <button type="button" class="rounded border border-gray-200 px-1.5" @click="decQty(item.variant.id)">-</button>
+                  <span>{{ item.qty }}</span>
+                  <button type="button" class="rounded border border-gray-200 px-1.5" @click="incQty(item.variant.id)">+</button>
+                </div>
               </div>
-              <span class="text-sm font-semibold text-gray-900 flex-shrink-0">${{ money(item.sale_price) }}</span>
-              <button @click="removeFromCart(item.id)" class="text-gray-300 hover:text-red-500 transition flex-shrink-0">
+              <span class="text-sm font-semibold text-gray-900 flex-shrink-0">${{ money((item.variant.sale_price_effective || item.product.sale_price) * item.qty) }}</span>
+              <button @click="removeFromCart(item.variant.id)" class="text-gray-300 hover:text-red-500 transition flex-shrink-0">
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
                 </svg>

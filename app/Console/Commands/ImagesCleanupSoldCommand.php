@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use App\Models\ProductImage;
-use App\Models\Setting;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Log;
@@ -13,20 +12,12 @@ class ImagesCleanupSoldCommand extends Command
 {
     protected $signature = 'images:cleanup-sold';
 
-    protected $description = 'Limpia imágenes de productos vendidos después de X días según configuración';
+    protected $description = 'Limpia imágenes de productos agotados por más de 15 días';
 
     public function handle(): int
     {
-        $days = (int) Setting::get('sales.delete_images_after_days', 15);
-
-        if ($days < 0) {
-            $days = 15;
-        }
-
-        $mode = strtolower((string) Setting::get('sales.delete_images_mode', 'soft'));
-        if (! in_array($mode, ['soft', 'hard'], true)) {
-            $mode = 'soft';
-        }
+        $days = 15;
+        $mode = 'soft';
 
         $cutoff = now()->subDays($days);
         $disk = Storage::disk('public');
@@ -40,9 +31,8 @@ class ImagesCleanupSoldCommand extends Command
         ProductImage::query()
             ->whereNull('deleted_at')
             ->whereHas('product', function (Builder $query) use ($cutoff) {
-                $query->where('status', 'vendido')
-                    ->whereNotNull('sold_at')
-                    ->where('sold_at', '<=', $cutoff);
+                $query->whereNotNull('sold_out_at')
+                    ->where('sold_out_at', '<=', $cutoff);
             })
             ->with(['product:id'])
             ->orderBy('id')
