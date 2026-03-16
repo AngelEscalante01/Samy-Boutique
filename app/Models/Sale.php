@@ -79,4 +79,9 @@ class Sale extends Model
     {
         return $this->hasMany(CouponRedemption::class);
     }
+
+    public function printAudits(): HasMany
+    {
+        return $this->hasMany(SalePrintAudit::class);
+    }
 }

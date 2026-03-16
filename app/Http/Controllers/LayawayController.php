@@ -105,7 +105,10 @@ class LayawayController extends Controller
         $layaway = $service->create($request->validated(), $request->user());
 
         if ($request->header('X-Inertia')) {
-            return redirect()->route('layaways.show', $layaway->id)->with('success', 'Apartado creado.');
+            return redirect()
+                ->route('layaways.show', $layaway->id)
+                ->with('success', 'Apartado creado.')
+                ->with('print_layaway_id', $layaway->id);
         }
 
         return response()->json(['layaway' => $layaway], 201);
@@ -113,16 +116,32 @@ class LayawayController extends Controller
 
     public function addPayment(Layaway $layaway, AddLayawayPaymentRequest $request, LayawayService $service)
     {
-        $service->addPayment($layaway, $request->validated());
+        $payment = $service->addPayment($layaway, $request->validated());
 
-        return redirect()->route('layaways.show', $layaway->id)->with('success', 'Abono registrado.');
+        if (! $request->header('X-Inertia') || $request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Abono registrado correctamente',
+                'layaway_id' => (int) $layaway->id,
+                'payment_id' => (int) $payment->id,
+            ], 201);
+        }
+
+        return redirect()
+            ->route('layaways.show', $layaway->id)
+            ->with('success', 'Abono registrado.')
+            ->with('print_layaway_payment_id', $payment->id);
     }
 
     public function liquidate(Layaway $layaway, LiquidateLayawayRequest $request, LayawayService $service)
     {
-        $service->liquidate($layaway, $request->validated(), $request->user());
+        $sale = $service->liquidate($layaway, $request->validated(), $request->user());
 
-        return redirect()->route('layaways.show', $layaway->id)->with('success', 'Apartado liquidado.');
+        return redirect()
+            ->route('layaways.show', $layaway->id)
+            ->with('success', 'Apartado liquidado.')
+            ->with('print_layaway_closed_id', $layaway->id)
+            ->with('print_sale_id', $sale->id);
     }
 
     public function cancel(Layaway $layaway, LayawayService $service)

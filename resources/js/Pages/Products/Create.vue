@@ -227,13 +227,6 @@ function submit() {
           <option value="unisex">Unisex</option>
         </UISelect>
 
-        <UIInput
-          v-model="form.sale_price_base"
-          label="Precio venta base (opcional)"
-          type="number"
-          placeholder="0.00"
-          :error="form.errors.sale_price_base"
-        />
       </div>
     </UICard>
 

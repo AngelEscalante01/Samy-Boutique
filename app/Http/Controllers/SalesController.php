@@ -183,7 +183,8 @@ class SalesController extends Controller
         if ($request->header('X-Inertia')) {
             return redirect()
                 ->route('pos.index')
-                ->with('success', 'Venta registrada.');
+                ->with('success', 'Venta registrada.')
+                ->with('print_sale_id', $sale->id);
         }
 
         return response()->json(['sale' => $sale], 201);

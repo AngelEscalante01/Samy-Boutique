@@ -1,11 +1,15 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { Head, Link, useForm } from '@inertiajs/vue3'
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3'
+import { printLayawayCreated } from '@/services/printSale'
 
 const props = defineProps({
   products:  { type: Array, required: true },
   customers: { type: Array, required: true },
 })
+
+const page = usePage()
+const statusMessage = ref(null) // { type: 'success' | 'error' | 'warning', text: string }
 
 const productQuery = ref('')
 const filteredProducts = computed(() => {
@@ -59,11 +63,48 @@ const initialPaymentMethod = ref('cash')
 const form = useForm({ customer_id: null, items: [], payments: [] })
 
 function submit() {
+  statusMessage.value = null
+
   form.customer_id = selectedCustomer.value?.id ?? null
   form.items = cart.value.map(item => ({ variant_id: item.variant.id, qty: Number(item.qty || 1) }))
   const amt = parseFloat(initialPaymentAmount.value)
   form.payments = (!isNaN(amt) && amt > 0) ? [{ method: initialPaymentMethod.value, amount: amt }] : []
-  form.post(route('layaways.store'))
+
+  form.post(route('layaways.store'), {
+    onError: () => {
+      statusMessage.value = {
+        type: 'error',
+        text: 'No se pudo guardar el apartado. Verifica los datos e intenta nuevamente.',
+      }
+    },
+    onSuccess: async (pageResponse) => {
+      const layawayId = pageResponse?.props?.flash?.print_layaway_id
+        ?? page.props?.flash?.print_layaway_id
+        ?? null
+
+      if (!layawayId) {
+        statusMessage.value = {
+          type: 'warning',
+          text: 'Apartado guardado, pero no se encontro el folio para imprimir automaticamente.',
+        }
+        return
+      }
+
+      const printResult = await printLayawayCreated(layawayId)
+      if (printResult.ok) {
+        statusMessage.value = {
+          type: 'success',
+          text: 'Apartado guardado e impresion enviada correctamente.',
+        }
+        return
+      }
+
+      statusMessage.value = {
+        type: 'error',
+        text: `Apartado guardado, pero fallo la impresion: ${printResult.message}`,
+      }
+    },
+  })
 }
 
 function money(v) { return Number(v).toFixed(2) }
@@ -98,6 +139,18 @@ function variantLabel(variant) {
         </svg>
       </Link>
       <h1 class="text-2xl font-bold text-gray-900">Nuevo apartado</h1>
+    </div>
+
+    <div
+      v-if="statusMessage"
+      class="mb-4 rounded-xl border px-4 py-3 text-sm"
+      :class="statusMessage.type === 'success'
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+        : statusMessage.type === 'warning'
+          ? 'border-amber-200 bg-amber-50 text-amber-800'
+          : 'border-red-200 bg-red-50 text-red-800'"
+    >
+      {{ statusMessage.text }}
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">

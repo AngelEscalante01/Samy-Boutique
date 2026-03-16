@@ -6,6 +6,8 @@ import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createApp, h } from 'vue';
 import { ZiggyVue } from '../../vendor/tightenco/ziggy';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import { setupGlobalPrintResultHandler } from '@/bridges/printResultHandler';
+import { setupAndroidPrinterBridgeGlobal } from '@/services/printSale';
 import { registerSW } from 'virtual:pwa-register';
 
 // Registrar el service worker — se actualiza automáticamente en segundo plano
@@ -15,6 +17,9 @@ registerSW({
         console.info('[PWA] Samy Boutique lista para usar sin conexión.');
     },
 });
+
+setupGlobalPrintResultHandler();
+setupAndroidPrinterBridgeGlobal();
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 

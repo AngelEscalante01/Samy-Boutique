@@ -36,6 +36,10 @@ class HandleInertiaRequests extends Middleware
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error'   => fn () => $request->session()->get('error'),
+                'print_sale_id' => fn () => $request->session()->get('print_sale_id'),
+                'print_layaway_id' => fn () => $request->session()->get('print_layaway_id'),
+                'print_layaway_payment_id' => fn () => $request->session()->get('print_layaway_payment_id'),
+                'print_layaway_closed_id' => fn () => $request->session()->get('print_layaway_closed_id'),
             ],
             'auth' => [
                 'user' => $user

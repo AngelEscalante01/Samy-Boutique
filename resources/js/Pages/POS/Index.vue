@@ -11,6 +11,7 @@ import {
     saveSnapshot,
 } from '@/offline/snapshot';
 import { getPendingCounts, getUnsyncedSoldSkus, queueSale, syncAll } from '@/offline/sync';
+import { printSale, validatePrinterReadyForCheckout } from '@/services/printSale';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
@@ -114,15 +115,25 @@ const selectedProductForVariant = ref(null);
 const toast        = ref(null); // { text, type }
 const uiMessage    = ref('');
 let toastTimer     = null;
+const printAlert = ref(null); // { type: 'error' | 'warning', text: string }
 
 const isOffline = ref(typeof window !== 'undefined' ? !window.navigator.onLine : false);
 const pendingCounts = ref({ sales: 0, layaways: 0, total: 0, conflicts: 0 });
 const syncingNow = ref(false);
+const isAutoPrinting = ref(false);
 
 function showToast(message, type = 'success') {
     clearTimeout(toastTimer);
     toast.value = { text: message, type };
     toastTimer  = setTimeout(() => (toast.value = null), 4000);
+}
+
+function showAlert(message, type = 'error') {
+    printAlert.value = { text: message, type };
+}
+
+function clearAlert() {
+    printAlert.value = null;
 }
 
 async function refreshPendingCounts() {
@@ -583,6 +594,14 @@ function openCheckout() {
 }
 
 async function onCheckoutConfirm({ payments }) {
+    clearAlert();
+
+    const printerCheck = validatePrinterReadyForCheckout();
+    if (!printerCheck.ready) {
+        showToast(printerCheck.message, 'error');
+        showAlert(printerCheck.message, 'warning');
+    }
+
     const payload = buildSalePayload(payments, selectedCustomer.value?.id ?? null);
 
     if (isOffline.value) {
@@ -614,13 +633,41 @@ async function onCheckoutConfirm({ payments }) {
 
     form.post(route('sales.store'), {
         preserveScroll: true,
-        onError: () => {},
-        onSuccess: async () => {
+        onError: () => {
+            showToast('No se pudo guardar la venta. Revisa los datos e intenta nuevamente.', 'error');
+            showAlert('No se pudo guardar la venta. Verifica los datos de cobro e intenta de nuevo.', 'error');
+        },
+        onSuccess: async (pageResponse) => {
+            const savedSaleId = pageResponse?.props?.flash?.print_sale_id
+                ?? page.props?.flash?.print_sale_id
+                ?? null;
+
             checkoutOpen.value = false;
             clearCart();
             showToast('Venta registrada correctamente.');
             form.reset();
             await refreshPendingCounts();
+
+            if (!savedSaleId) {
+                showToast('La venta se guardo, pero no se pudo identificar para impresion automatica.', 'error');
+                showAlert('Venta guardada, pero no se encontro el folio para imprimir automaticamente.', 'warning');
+                return;
+            }
+
+            isAutoPrinting.value = true;
+            try {
+                const printResult = await printSale(savedSaleId);
+                if (printResult.ok) {
+                    showToast('Ticket enviado a impresora.');
+                    clearAlert();
+                    return;
+                }
+
+                showToast(`Venta guardada, pero fallo la impresion: ${printResult.message}`, 'error');
+                showAlert(`Venta guardada, pero no se pudo imprimir el ticket: ${printResult.message}`, 'error');
+            } finally {
+                isAutoPrinting.value = false;
+            }
         },
     });
 }
@@ -723,6 +770,32 @@ async function onCheckoutConfirm({ payments }) {
                 <div class="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-xs text-stone-600">
                     Última actualización: {{ formatSnapshotDate(lastSnapshotAt) }}
                     <span v-if="isOffline" class="ml-2 font-semibold text-amber-700">Modo offline: usando inventario guardado</span>
+                </div>
+
+                <div
+                    v-if="printAlert"
+                    class="rounded-lg border px-3 py-2 text-xs"
+                    :class="printAlert.type === 'warning'
+                        ? 'border-amber-200 bg-amber-50 text-amber-800'
+                        : 'border-red-200 bg-red-50 text-red-800'"
+                >
+                    <div class="flex items-start justify-between gap-3">
+                        <p class="font-semibold">{{ printAlert.text }}</p>
+                        <button
+                            type="button"
+                            class="shrink-0 rounded px-1 text-[11px] font-bold opacity-80 hover:opacity-100"
+                            @click="clearAlert"
+                        >
+                            Cerrar
+                        </button>
+                    </div>
+                </div>
+
+                <div
+                    v-if="isAutoPrinting"
+                    class="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-800"
+                >
+                    Imprimiendo ticket...
                 </div>
 
                 <!-- Search -->

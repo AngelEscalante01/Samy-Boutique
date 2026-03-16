@@ -5,6 +5,7 @@ use App\Http\Controllers\PosController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\SalesController;
 use App\Http\Controllers\LayawayController;
+use App\Http\Controllers\LayawayPrintController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ReportsController;
@@ -13,6 +14,7 @@ use App\Http\Controllers\CouponController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\CashCutsController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\SalesPrintController;
 use App\Http\Controllers\PublicCatalogController;
 use App\Http\Controllers\SyncSalesController;
 use App\Http\Controllers\OfflineSnapshotController;
@@ -151,6 +153,14 @@ Route::middleware('auth')->group(function () {
     Route::get('/sales/{sale}', [SalesController::class, 'show'])
         ->middleware('permission:sales.view')
         ->name('sales.show');
+
+    Route::get('/sales/{sale}/print-data', [SalesPrintController::class, 'show'])
+        ->middleware('permission:sales.view')
+        ->name('sales.print-data');
+
+    Route::post('/sales/{sale}/print-audit', [SalesPrintController::class, 'storeAudit'])
+        ->middleware('permission:sales.view')
+        ->name('sales.print-audit.store');
 
     Route::patch('/sales/{sale}/cancel', [SalesController::class, 'cancel'])
         ->middleware('permission:sales.cancel')
@@ -338,6 +348,26 @@ Route::middleware('auth')->group(function () {
     Route::post('/layaways/{layaway}/payments', [LayawayController::class, 'addPayment'])
         ->middleware('permission:pos.view')
         ->name('layaways.payments.store');
+
+    Route::get('/layaways/{layaway}/print-data/created', [LayawayPrintController::class, 'created'])
+        ->middleware('permission:pos.view')
+        ->name('layaways.print.created');
+
+    Route::get('/layaways/{layaway}/print-data', [LayawayPrintController::class, 'created'])
+        ->middleware('permission:pos.view')
+        ->name('layaways.print-data');
+
+    Route::get('/layaways/{layaway}/payments/{payment}/print-data', [LayawayPrintController::class, 'payment'])
+        ->middleware('permission:pos.view')
+        ->name('layaways.print.payment');
+
+    Route::get('/layaways/{layaway}/print-data/closed', [LayawayPrintController::class, 'closed'])
+        ->middleware('permission:pos.view')
+        ->name('layaways.print.closed');
+
+    Route::get('/layaways/{layaway}/close-print-data', [LayawayPrintController::class, 'closed'])
+        ->middleware('permission:pos.view')
+        ->name('layaways.close-print-data');
 
     Route::post('/layaways/{layaway}/liquidate', [LayawayController::class, 'liquidate'])
         ->middleware('permission:pos.view')

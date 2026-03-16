@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
@@ -46,5 +47,10 @@ class User extends Authenticatable
             'password'          => 'hashed',
             'active'            => 'boolean',
         ];
+    }
+
+    public function salePrintAudits(): HasMany
+    {
+        return $this->hasMany(SalePrintAudit::class);
     }
 }

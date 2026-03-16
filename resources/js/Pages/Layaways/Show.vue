@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3'
+import { printLayawayClosed, printLayawayCreated, printLayawayPayment, printSale } from '@/services/printSale'
 
 const props = defineProps({
   layaway: { type: Object, required: true },
@@ -8,7 +9,13 @@ const props = defineProps({
 })
 
 const flash = computed(() => usePage().props.flash ?? {})
+const page = usePage()
 const isOpen = computed(() => props.layaway.status === 'open')
+const paymentPrintMessage = ref(null) // { type: 'success' | 'warning' | 'error', text: string }
+const AUTO_PRINT_FINAL_SALE_AFTER_LIQUIDATION = false
+const isReprintingCreated = ref(false)
+const isReprintingClosed = ref(false)
+const reprintingPaymentId = ref(null)
 
 const badgeClass = { open: 'bg-amber-100 text-amber-800', liquidated: 'bg-emerald-100 text-emerald-800', cancelled: 'bg-red-100 text-red-700' }
 const statusLabel = { open: 'Activo', liquidated: 'Liquidado', cancelled: 'Cancelado' }
@@ -20,7 +27,48 @@ function fmtDateShort(d) { if (!d) return '—'; return new Date(d).toLocaleDate
 function thumbUrl(product) { const img = product?.images?.[0]; return img ? '/storage/' + img.path : null }
 
 const addPaymentForm = useForm({ method: 'cash', amount: '', reference: '' })
-function submitAddPayment() { addPaymentForm.post(route('layaways.payments.store', props.layaway.id), { onSuccess: () => addPaymentForm.reset() }) }
+function submitAddPayment() {
+  paymentPrintMessage.value = null
+
+  addPaymentForm.post(route('layaways.payments.store', props.layaway.id), {
+    preserveScroll: true,
+    onError: () => {
+      paymentPrintMessage.value = {
+        type: 'error',
+        text: 'No se pudo guardar el abono. Revisa los datos e intenta nuevamente.',
+      }
+    },
+    onSuccess: async (pageResponse) => {
+      addPaymentForm.reset()
+
+      const paymentId = pageResponse?.props?.flash?.print_layaway_payment_id
+        ?? page.props?.flash?.print_layaway_payment_id
+        ?? null
+
+      if (!paymentId) {
+        paymentPrintMessage.value = {
+          type: 'warning',
+          text: 'Abono guardado, pero no se encontro el identificador para imprimir ticket.',
+        }
+        return
+      }
+
+      const printResult = await printLayawayPayment(props.layaway.id, paymentId)
+      if (printResult.ok) {
+        paymentPrintMessage.value = {
+          type: 'success',
+          text: 'Abono guardado e impresion enviada correctamente.',
+        }
+        return
+      }
+
+      paymentPrintMessage.value = {
+        type: 'error',
+        text: `Abono guardado, pero no se pudo imprimir: ${printResult.message}`,
+      }
+    },
+  })
+}
 
 const remaining = computed(() => Number(props.layaway.balance))
 const liquidateForm = useForm({ payments: [{ method: 'cash', amount: '' }] })
@@ -37,14 +85,130 @@ function submitLiquidate() {
     .filter((p) => p.amount > 0)
 
   liquidateForm.transform(() => ({ payments }))
+  paymentPrintMessage.value = null
+
   liquidateForm.post(route('layaways.liquidate', props.layaway.id), {
     preserveScroll: true,
+    onError: () => {
+      paymentPrintMessage.value = {
+        type: 'error',
+        text: 'No se pudo liquidar el apartado. Revisa los pagos e intenta nuevamente.',
+      }
+    },
+    onSuccess: async (pageResponse) => {
+      const layawayId = pageResponse?.props?.flash?.print_layaway_closed_id
+        ?? page.props?.flash?.print_layaway_closed_id
+        ?? null
+
+      if (!layawayId) {
+        paymentPrintMessage.value = {
+          type: 'warning',
+          text: 'Liquidacion guardada, pero no se encontro el folio para imprimir ticket de liquidacion.',
+        }
+        return
+      }
+
+      const printLayawayResult = await printLayawayClosed(layawayId)
+      if (!printLayawayResult.ok) {
+        paymentPrintMessage.value = {
+          type: 'error',
+          text: `Liquidacion guardada, pero fallo la impresion del ticket: ${printLayawayResult.message}`,
+        }
+        return
+      }
+
+      const saleId = printLayawayResult.ticket?.sale_id
+        ?? pageResponse?.props?.flash?.print_sale_id
+        ?? page.props?.flash?.print_sale_id
+        ?? null
+
+      if (AUTO_PRINT_FINAL_SALE_AFTER_LIQUIDATION && saleId) {
+        const printSaleResult = await printSale(saleId)
+        if (!printSaleResult.ok) {
+          paymentPrintMessage.value = {
+            type: 'warning',
+            text: `Liquidacion impresa. Ticket de venta final pendiente: ${printSaleResult.message}`,
+          }
+          return
+        }
+
+        paymentPrintMessage.value = {
+          type: 'success',
+          text: 'Liquidacion guardada e impresiones (liquidacion y venta final) enviadas correctamente.',
+        }
+        return
+      }
+
+      paymentPrintMessage.value = {
+        type: saleId ? 'warning' : 'success',
+        text: saleId
+          ? 'Liquidacion guardada e impresa. Ticket de venta final disponible (activar AUTO_PRINT_FINAL_SALE_AFTER_LIQUIDATION para imprimirlo automaticamente).'
+          : 'Liquidacion guardada e impresion de ticket enviada correctamente.',
+      }
+    },
   })
 }
 
 const showCancelConfirm = ref(false)
 const cancelForm = useForm({})
 function submitCancel() { cancelForm.post(route('layaways.cancel', props.layaway.id)); showCancelConfirm.value = false }
+
+async function reprintCreatedTicket() {
+  if (isReprintingCreated.value) return
+
+  paymentPrintMessage.value = null
+  isReprintingCreated.value = true
+
+  try {
+    const result = await printLayawayCreated(props.layaway.id)
+    paymentPrintMessage.value = {
+      type: result.ok ? 'success' : 'error',
+      text: result.ok
+        ? 'Reimpresion de ticket de creacion enviada correctamente.'
+        : `No se pudo reimprimir ticket de creacion: ${result.message}`,
+    }
+  } finally {
+    isReprintingCreated.value = false
+  }
+}
+
+async function reprintPaymentTicket(paymentId) {
+  if (!paymentId || reprintingPaymentId.value === paymentId) return
+
+  paymentPrintMessage.value = null
+  reprintingPaymentId.value = paymentId
+
+  try {
+    const result = await printLayawayPayment(props.layaway.id, paymentId)
+    paymentPrintMessage.value = {
+      type: result.ok ? 'success' : 'error',
+      text: result.ok
+        ? 'Reimpresion de ticket de abono enviada correctamente.'
+        : `No se pudo reimprimir ticket de abono: ${result.message}`,
+    }
+  } finally {
+    reprintingPaymentId.value = null
+  }
+}
+
+async function reprintClosedTicket() {
+  if (isReprintingClosed.value || props.layaway.status !== 'liquidated') return
+
+  paymentPrintMessage.value = null
+  isReprintingClosed.value = true
+
+  try {
+    const result = await printLayawayClosed(props.layaway.id)
+    paymentPrintMessage.value = {
+      type: result.ok ? 'success' : 'error',
+      text: result.ok
+        ? 'Reimpresion de ticket de liquidacion enviada correctamente.'
+        : `No se pudo reimprimir ticket de liquidacion: ${result.message}`,
+    }
+  } finally {
+    isReprintingClosed.value = false
+  }
+}
 </script>
 
 <template>
@@ -78,6 +242,18 @@ function submitCancel() { cancelForm.post(route('layaways.cancel', props.layaway
     <div v-if="flash.success" class="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-800 flex items-center gap-2">
       <svg class="h-4 w-4 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
       {{ flash.success }}
+    </div>
+
+    <div
+      v-if="paymentPrintMessage"
+      class="rounded-xl border px-4 py-3 text-sm"
+      :class="paymentPrintMessage.type === 'success'
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+        : paymentPrintMessage.type === 'warning'
+          ? 'border-amber-200 bg-amber-50 text-amber-800'
+          : 'border-red-200 bg-red-50 text-red-800'"
+    >
+      {{ paymentPrintMessage.text }}
     </div>
 
     <!-- Stat cards -->
@@ -150,6 +326,7 @@ function submitCancel() { cancelForm.post(route('layaways.cancel', props.layaway
                 <th class="pb-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Metodo</th>
                 <th class="pb-2 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Referencia</th>
                 <th class="pb-2 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Monto</th>
+                <th class="pb-2 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Reimpresion</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-50">
@@ -158,6 +335,16 @@ function submitCancel() { cancelForm.post(route('layaways.cancel', props.layaway
                 <td class="py-2 text-gray-700">{{ methodLabel[pmt.method] ?? pmt.method }}</td>
                 <td class="py-2 text-gray-400 font-mono text-xs">{{ pmt.reference ?? '—' }}</td>
                 <td class="py-2 text-right font-semibold text-emerald-600">${{ money(pmt.amount) }}</td>
+                <td class="py-2 text-right">
+                  <button
+                    type="button"
+                    class="rounded-lg border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    :disabled="reprintingPaymentId === pmt.id"
+                    @click="reprintPaymentTicket(pmt.id)"
+                  >
+                    {{ reprintingPaymentId === pmt.id ? 'Imprimiendo...' : 'Reimprimir' }}
+                  </button>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -236,6 +423,32 @@ function submitCancel() { cancelForm.post(route('layaways.cancel', props.layaway
         <div v-if="!isOpen" class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 text-sm text-gray-500 space-y-2">
           <p v-if="layaway.status === 'liquidated'">Liquidado el <strong>{{ fmtDateShort(layaway.liquidated_at) }}</strong>.</p>
           <p v-if="layaway.status === 'cancelled'">Cancelado el <strong>{{ fmtDateShort(layaway.cancelled_at) }}</strong>.</p>
+        </div>
+
+        <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 space-y-3">
+          <h2 class="text-sm font-semibold text-gray-700">Reimpresion manual</h2>
+
+          <button
+            type="button"
+            class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            :disabled="isReprintingCreated"
+            @click="reprintCreatedTicket"
+          >
+            {{ isReprintingCreated ? 'Imprimiendo...' : 'Reimprimir ticket de creacion' }}
+          </button>
+
+          <button
+            type="button"
+            class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+            :disabled="isReprintingClosed || layaway.status !== 'liquidated'"
+            @click="reprintClosedTicket"
+          >
+            {{ isReprintingClosed ? 'Imprimiendo...' : 'Reimprimir ticket de liquidacion' }}
+          </button>
+
+          <p class="text-xs text-gray-500">
+            La reimpresion consulta solo endpoints JSON y no altera saldos ni inventario.
+          </p>
         </div>
       </div>
     </div>
