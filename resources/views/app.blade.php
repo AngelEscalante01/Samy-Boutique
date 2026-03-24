@@ -37,7 +37,6 @@
             id="android-printer-settings-btn"
             type="button"
             class="fixed bottom-4 right-4 z-50 hidden items-center gap-2 rounded-xl border border-stone-300 bg-white px-3 py-2 text-xs font-semibold text-stone-700 shadow hover:bg-stone-50"
-            onclick="window.AndroidPrinterBridge && window.AndroidPrinterBridge.abrirConfiguracion && window.AndroidPrinterBridge.abrirConfiguracion()"
             title="Configuracion de impresora"
         >
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -54,6 +53,54 @@
 
                 const isAndroidApp = () => typeof window.AndroidPrinter !== 'undefined';
 
+                const notifyUser = (message, type) => {
+                    if (typeof window.showGlobalToast === 'function') {
+                        window.showGlobalToast(message, type || 'info');
+                        return;
+                    }
+
+                    if (window.Swal && typeof window.Swal.fire === 'function') {
+                        window.Swal.fire({
+                            icon: type === 'error' ? 'error' : (type === 'success' ? 'success' : 'info'),
+                            title: 'Impresora',
+                            text: message,
+                            timer: 2800,
+                            showConfirmButton: false,
+                        });
+                        return;
+                    }
+
+                    console.log('[PRINT][UI]', message);
+                };
+
+                const onPrinterSettingsClick = () => {
+                    console.info('[PRINT][UI] Click en Configuracion de impresora.');
+
+                    if (typeof window.AndroidPrinter === 'undefined') {
+                        console.warn('[PRINT][UI] window.AndroidPrinter no disponible.');
+                        notifyUser('La app Android de impresora no esta disponible en este dispositivo.', 'error');
+                        return;
+                    }
+
+                    if (typeof window.AndroidPrinter.openPrinterSettings !== 'function') {
+                        console.warn('[PRINT][UI] window.AndroidPrinter.openPrinterSettings no disponible.');
+                        notifyUser('La funcion de configuracion de impresora no esta disponible en esta version de la app Android.', 'error');
+                        return;
+                    }
+
+                    try {
+                        console.info('[PRINT][UI] Ejecutando window.AndroidPrinter.openPrinterSettings().');
+                        window.AndroidPrinter.openPrinterSettings();
+                        notifyUser('Abriendo configuracion de impresora...', 'info');
+                    } catch (error) {
+                        console.error('[PRINT][UI] Error al abrir configuracion de impresora:', error);
+                        notifyUser('No se pudo abrir la configuracion de impresora. Intenta nuevamente.', 'error');
+                    }
+                };
+
+                // Exponer helper para reutilizarlo desde otras vistas/scripts.
+                window.openPrinterSettingsFromWeb = onPrinterSettingsClick;
+
                 const syncVisibility = () => {
                     if (isAndroidApp()) {
                         button.classList.remove('hidden');
@@ -65,6 +112,7 @@
                     button.classList.remove('inline-flex');
                 };
 
+                button.addEventListener('click', onPrinterSettingsClick);
                 syncVisibility();
                 window.addEventListener('load', syncVisibility);
                 document.addEventListener('inertia:navigate', syncVisibility);

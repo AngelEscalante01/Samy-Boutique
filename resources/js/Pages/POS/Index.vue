@@ -552,7 +552,7 @@ async function applyCouponPreview() {
                 'X-CSRF-TOKEN': csrfToken.value,
                 Accept: 'application/json',
             },
-            body: JSON.stringify(buildSalePayload()),
+            body: JSON.stringify(buildSalePayload([], selectedCustomer.value?.id ?? null)),
         });
         const data = await res.json();
         if (!res.ok) {
@@ -568,13 +568,20 @@ async function applyCouponPreview() {
 }
 
 watch(
-    () => [couponCode.value, globalDiscountType.value, globalDiscountValue.value, cart.value.map((i) => [i.variant.id, i.qty, i.discount_type, i.discount_value])],
+    () => [
+        couponCode.value,
+        globalDiscountType.value,
+        globalDiscountValue.value,
+        selectedCustomer.value?.id ?? null,
+        cart.value.map((i) => [i.variant.id, i.qty, i.discount_type, i.discount_value]),
+    ],
     () => { previewTotals.value = null; couponApplied.value = false; previewError.value = ''; },
     { deep: true },
 );
 
 // ── Checkout modal ────────────────────────────────────────────────────────────
 const checkoutOpen = ref(false);
+const checkoutTotal = ref(0);
 
 const form = useForm({
     customer_id: null,
@@ -585,11 +592,40 @@ const form = useForm({
     payments: [],
 });
 
-function openCheckout() {
+async function resolveServerCheckoutTotal() {
+    const fallbackTotal = Number(Number(total.value ?? 0).toFixed(2));
+
+    try {
+        const previewPayload = buildSalePayload([], selectedCustomer.value?.id ?? null);
+        const res = await fetch(route('sales.preview'), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': csrfToken.value,
+                Accept: 'application/json',
+            },
+            body: JSON.stringify(previewPayload),
+        });
+
+        const data = await res.json();
+        if (!res.ok || data?.totals?.total == null) {
+            return fallbackTotal;
+        }
+
+        return Number(Number(data.totals.total).toFixed(2));
+    } catch {
+        return fallbackTotal;
+    }
+}
+
+async function openCheckout() {
     if (cart.value.length === 0) { showToast('Agrega productos al carrito.', 'error'); return; }
     if (couponCode.value?.trim() && !couponApplied.value) {
         showToast('Aplica el cupón antes de cobrar.', 'error'); return;
     }
+
+    checkoutTotal.value = await resolveServerCheckoutTotal();
     checkoutOpen.value = true;
 }
 
@@ -1150,7 +1186,7 @@ async function onCheckoutConfirm({ payments }) {
     <!-- Checkout modal -->
     <CheckoutModal
         :show="checkoutOpen"
-        :total="total"
+        :total="checkoutTotal"
         :is-processing="form.processing"
         :errors="form.errors"
         @close="checkoutOpen = false"

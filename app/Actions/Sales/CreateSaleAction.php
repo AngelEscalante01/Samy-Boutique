@@ -243,12 +243,37 @@ class CreateSaleAction
                 }
             }
 
-            // Pagos
-            $paymentsSum = 0.0;
-            foreach ($paymentsPayload as $p) {
-                $paymentsSum += (float) $p['amount'];
+            // Pagos: normalizar montos para evitar errores por tipos, vacíos y precisión decimal.
+            $normalizedPayments = collect($paymentsPayload)
+                ->map(function ($payment) {
+                    return [
+                        'method' => strtolower(trim((string) Arr::get($payment, 'method', 'other'))),
+                        'amount' => $this->toMoneyFloat(Arr::get($payment, 'amount', 0)),
+                        'reference' => Arr::get($payment, 'reference'),
+                    ];
+                })
+                ->values();
+
+            $saleTotalRounded = round($this->toMoneyFloat($total), 2);
+
+            // Para pago unico, el backend fija el monto exacto del total para evitar desajustes por frontend cacheado.
+            if ($normalizedPayments->count() === 1) {
+                $singlePayment = $normalizedPayments->first();
+
+                if (is_array($singlePayment) && in_array($singlePayment['method'] ?? 'other', ['cash', 'card', 'transfer', 'other'], true)) {
+                    $singlePayment['amount'] = $saleTotalRounded;
+                    $normalizedPayments = collect([$singlePayment]);
+                }
             }
-            if (round($paymentsSum, 2) !== round($total, 2)) {
+
+            $paymentsSum = $normalizedPayments
+                ->sum(fn (array $payment) => round($payment['amount'], 2));
+
+            $paymentsTotalRounded = round($paymentsSum, 2);
+            $paymentsTotalCents = $this->toMoneyCents($paymentsTotalRounded);
+            $saleTotalCents = $this->toMoneyCents($saleTotalRounded);
+
+            if ($paymentsTotalCents !== $saleTotalCents) {
                 throw ValidationException::withMessages([
                     'payments' => ['El total de pagos debe coincidir exactamente con el total de la venta.'],
                 ]);
@@ -294,12 +319,12 @@ class CreateSaleAction
                 ]);
             }
 
-            foreach ($paymentsPayload as $payment) {
+            foreach ($normalizedPayments as $payment) {
                 SalePayment::create([
                     'sale_id' => $sale->id,
                     'method' => $payment['method'],
-                    'amount' => $payment['amount'],
-                    'reference' => $payment['reference'] ?? null,
+                    'amount' => number_format($payment['amount'], 2, '.', ''),
+                    'reference' => $payment['reference'] ?: null,
                 ]);
             }
 
@@ -471,5 +496,35 @@ class CreateSaleAction
         }
 
         return $discountValue > $maxAmount;
+    }
+
+    private function toMoneyFloat(mixed $value): float
+    {
+        if ($value === null || $value === '') {
+            return 0.0;
+        }
+
+        if (is_string($value)) {
+            $normalized = trim(str_replace(',', '.', $value));
+
+            if ($normalized === '' || ! is_numeric($normalized)) {
+                return 0.0;
+            }
+
+            return (float) $normalized;
+        }
+
+        if (is_numeric($value)) {
+            return (float) $value;
+        }
+
+        return 0.0;
+    }
+
+    private function toMoneyCents(mixed $value): int
+    {
+        $amount = round($this->toMoneyFloat($value), 2);
+
+        return (int) round($amount * 100, 0);
     }
 }

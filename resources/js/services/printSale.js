@@ -105,16 +105,39 @@ export function imprimirVenta(data) {
  * @returns {{ok:boolean,message:string}}
  */
 export function abrirConfiguracion() {
-    if (!hasAndroidPrinterBridge() || typeof window.AndroidPrinter?.openSettings !== 'function') {
-        return { ok: false, message: 'Configuracion de impresora no disponible.' };
+    console.info('[PRINT] Intentando abrir configuracion de impresora...');
+
+    if (!hasAndroidPrinterBridge()) {
+        console.warn('[PRINT] AndroidPrinter no disponible en window.');
+        return { ok: false, message: 'No se detecto la app Android con integracion de impresora.' };
+    }
+
+    const openPrinterSettingsFn = window.AndroidPrinter?.openPrinterSettings;
+    const openSettingsFn = window.AndroidPrinter?.openSettings;
+
+    if (typeof openPrinterSettingsFn !== 'function' && typeof openSettingsFn !== 'function') {
+        console.warn('[PRINT] No existe openPrinterSettings/openSettings en AndroidPrinter.');
+        return { ok: false, message: 'La funcion de configuracion de impresora no esta disponible en la app Android.' };
     }
 
     try {
-        window.AndroidPrinter.openSettings();
+        if (typeof openPrinterSettingsFn === 'function') {
+            console.info('[PRINT] Usando AndroidPrinter.openPrinterSettings().');
+            openPrinterSettingsFn.call(window.AndroidPrinter);
+        } else {
+            console.info('[PRINT] Usando fallback AndroidPrinter.openSettings().');
+            openSettingsFn.call(window.AndroidPrinter);
+        }
+
         return { ok: true, message: 'Abriendo configuracion de impresora.' };
     } catch (error) {
+        console.error('[PRINT] Error al abrir configuracion de impresora:', error);
         return { ok: false, message: error?.message || 'No se pudo abrir la configuracion.' };
     }
+}
+
+export function openPrinterSettings() {
+    return abrirConfiguracion();
 }
 
 /**
@@ -520,6 +543,7 @@ export function setupAndroidPrinterBridgeGlobal() {
         isAndroidApp: hasAndroidPrinterBridge,
         imprimirVenta,
         openSettings: abrirConfiguracion,
+        openPrinterSettings,
         abrirConfiguracion,
         getStatus: () => getPrinterStatus().status,
     };
