@@ -38,7 +38,7 @@ class StoreProductRequest extends FormRequest
 
             // Imágenes
             'images' => ['nullable', 'array', 'max:10'],
-            'images.*' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
+            'images.*' => ['required', 'file', 'image', 'mimes:jpg,jpeg,png,webp', 'max:20480'],
         ];
     }
 
@@ -48,7 +48,7 @@ class StoreProductRequest extends FormRequest
             'variants.required' => 'Debes agregar al menos una variante.',
             'variants.min' => 'Debes agregar al menos una variante.',
             'images.max' => 'Máximo 10 imágenes por producto.',
-            'images.*.max' => 'Cada imagen debe pesar máximo 4MB.',
+            'images.*.max' => 'Cada imagen debe pesar máximo 20MB.',
             'images.*.mimes' => 'Las imágenes deben ser JPG, PNG o WEBP.',
         ];
     }
