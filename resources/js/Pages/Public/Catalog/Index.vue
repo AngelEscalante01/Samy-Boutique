@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = defineProps({
   products: { type: Object, required: true },
+  pagination: { type: Object, default: () => ({}) },
   filters: { type: Object, default: () => ({}) },
   categories: { type: Array, default: () => [] },
   sizes: { type: Array, default: () => [] },
@@ -53,6 +54,75 @@ function clearFilters() {
 }
 
 const hasProducts = computed(() => (props.products?.data?.length ?? 0) > 0)
+
+const paginationSummary = computed(() => {
+  const from = Number(props.pagination?.from ?? 0)
+  const to = Number(props.pagination?.to ?? 0)
+  const total = Number(props.pagination?.total ?? 0)
+
+  if (total <= 0 || from <= 0 || to <= 0) {
+    return 'Mostrando 0 productos'
+  }
+
+  return `Mostrando ${from}-${to} de ${total} productos`
+})
+
+const metaPaginationLinks = computed(() => {
+  const links = props.products?.meta?.links
+  return Array.isArray(links) ? links : []
+})
+
+const previousPageLink = computed(() => {
+  if (metaPaginationLinks.value.length > 0) {
+    return metaPaginationLinks.value[0] ?? null
+  }
+
+  return {
+    url: props.products?.links?.prev ?? null,
+    label: 'Anterior',
+    active: false,
+  }
+})
+
+const nextPageLink = computed(() => {
+  if (metaPaginationLinks.value.length > 0) {
+    return metaPaginationLinks.value[metaPaginationLinks.value.length - 1] ?? null
+  }
+
+  return {
+    url: props.products?.links?.next ?? null,
+    label: 'Siguiente',
+    active: false,
+  }
+})
+
+const pageNumberLinks = computed(() => {
+  const links = metaPaginationLinks.value
+
+  return links
+    .slice(1, -1)
+    .map((link) => {
+      const label = String(link?.label ?? '').replace(/[^\d]/g, '')
+
+      return {
+        ...link,
+        page: label ? Number(label) : null,
+      }
+    })
+})
+
+function visitPage(url) {
+  if (!url) return
+
+  router.visit(url, {
+    preserveState: true,
+    preserveScroll: true,
+  })
+}
+
+const showPagination = computed(() => {
+  return (Number(props.pagination?.last_page ?? 1) > 1)
+})
 
 function money(v) {
   return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(v ?? 0)
@@ -237,22 +307,82 @@ onBeforeUnmount(() => {
         <p class="mt-2 text-sm text-stone-500">Prueba con otros filtros.</p>
       </section>
 
-      <nav v-if="(products.links?.length ?? 0) > 3" class="mt-10 flex flex-wrap items-center justify-center gap-2">
-        <template v-for="link in products.links" :key="link.label">
-          <span
-            v-if="!link.url"
-            class="rounded-full border border-stone-200 bg-white px-3 py-2 text-sm text-stone-300"
-            v-html="link.label"
-          />
+      <p class="mt-8 text-center text-sm font-medium text-stone-500">
+        {{ paginationSummary }}
+      </p>
+
+      <nav v-if="showPagination" class="mt-5">
+        <div class="hidden sm:flex items-center justify-center gap-2">
           <button
-            v-else
             type="button"
-            class="rounded-full border px-3 py-2 text-sm font-semibold"
-            :class="link.active ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-stone-200 bg-white text-stone-700 hover:border-zinc-900'"
-            v-html="link.label"
-            @click="router.visit(link.url, { preserveScroll: true, preserveState: true })"
-          />
-        </template>
+            class="rounded-full border px-4 py-2 text-sm font-semibold transition"
+            :class="previousPageLink?.url
+              ? 'border-stone-200 bg-white text-stone-700 hover:border-zinc-900 hover:text-zinc-900'
+              : 'border-stone-200 bg-stone-100 text-stone-400 cursor-not-allowed'"
+            :disabled="!previousPageLink?.url"
+            @click="visitPage(previousPageLink?.url)"
+          >
+            Anterior
+          </button>
+
+          <button
+            v-for="(link, index) in pageNumberLinks"
+            :key="`page-${index}-${link.label}`"
+            type="button"
+            class="min-w-10 rounded-full border px-3 py-2 text-sm font-semibold transition"
+            :class="link.active
+              ? 'border-zinc-900 bg-zinc-900 text-white'
+              : link.url
+                ? 'border-stone-200 bg-white text-stone-700 hover:border-zinc-900'
+                : 'border-stone-200 bg-stone-100 text-stone-400 cursor-not-allowed'"
+            :disabled="!link.url"
+            @click="visitPage(link.url)"
+          >
+            {{ link.page ?? '…' }}
+          </button>
+
+          <button
+            type="button"
+            class="rounded-full border px-4 py-2 text-sm font-semibold transition"
+            :class="nextPageLink?.url
+              ? 'border-stone-200 bg-white text-stone-700 hover:border-zinc-900 hover:text-zinc-900'
+              : 'border-stone-200 bg-stone-100 text-stone-400 cursor-not-allowed'"
+            :disabled="!nextPageLink?.url"
+            @click="visitPage(nextPageLink?.url)"
+          >
+            Siguiente
+          </button>
+        </div>
+
+        <div class="sm:hidden mt-4 flex items-center justify-center gap-2">
+          <button
+            type="button"
+            class="rounded-full border px-3 py-2 text-xs font-semibold transition"
+            :class="previousPageLink?.url
+              ? 'border-stone-200 bg-white text-stone-700'
+              : 'border-stone-200 bg-stone-100 text-stone-400 cursor-not-allowed'"
+            :disabled="!previousPageLink?.url"
+            @click="visitPage(previousPageLink?.url)"
+          >
+            Anterior
+          </button>
+
+          <span class="rounded-full border border-stone-200 bg-white px-3 py-2 text-xs font-semibold text-stone-600">
+            {{ pagination?.current_page ?? 1 }} / {{ pagination?.last_page ?? 1 }}
+          </span>
+
+          <button
+            type="button"
+            class="rounded-full border px-3 py-2 text-xs font-semibold transition"
+            :class="nextPageLink?.url
+              ? 'border-stone-200 bg-white text-stone-700'
+              : 'border-stone-200 bg-stone-100 text-stone-400 cursor-not-allowed'"
+            :disabled="!nextPageLink?.url"
+            @click="visitPage(nextPageLink?.url)"
+          >
+            Siguiente
+          </button>
+        </div>
       </nav>
     </main>
   </div>
