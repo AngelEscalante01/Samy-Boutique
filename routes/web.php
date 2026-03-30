@@ -22,6 +22,8 @@ use App\Http\Controllers\Catalogs\CategoryController;
 use App\Http\Controllers\Catalogs\SizeController;
 use App\Http\Controllers\Catalogs\ColorController;
 use Inertia\Inertia;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Storage;
 
 Route::get('/', function () {
@@ -287,6 +289,39 @@ Route::middleware('auth')->group(function () {
         Route::put('/settings', [SettingsController::class, 'update'])
             ->middleware(['role:gerente', 'permission:settings.manage'])
             ->name('settings.update');
+
+    // Temporal: ejecutar migraciones desde web en producción sin terminal.
+    Route::get('/_ops/temp/run-migrations', function (Request $request) {
+        abort_unless((bool) config('samy.temp_migration_route_enabled', false), 404);
+
+        $expectedToken = trim((string) config('samy.temp_migration_route_token', ''));
+        $providedToken = trim((string) $request->query('token', ''));
+
+        if ($expectedToken === '' || $providedToken === '' || ! hash_equals($expectedToken, $providedToken)) {
+            abort(403, 'Token invalido.');
+        }
+
+        @set_time_limit(0);
+
+        try {
+            Artisan::call('migrate', ['--force' => true]);
+
+            return response()->json([
+                'ok' => true,
+                'message' => 'Migraciones ejecutadas correctamente.',
+                'output' => trim(Artisan::output()),
+            ]);
+        } catch (\Throwable $exception) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'No fue posible ejecutar migraciones.',
+                'error' => $exception->getMessage(),
+            ], 500);
+        }
+    })
+        ->middleware(['role:gerente', 'permission:settings.manage'])
+        ->name('ops.temp.run-migrations');
+
     Route::post('/sales', [SalesController::class, 'store'])
         ->middleware('permission:sales.create')
         ->name('sales.store');

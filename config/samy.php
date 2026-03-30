@@ -12,4 +12,8 @@ return [
 
     // Número para CTA de WhatsApp en catálogo público (formato internacional sin +).
     'catalog_whatsapp_number' => env('SAMY_CATALOG_WHATSAPP_NUMBER', ''),
+
+    // Ruta temporal para correr migraciones desde web (desactivada por defecto).
+    'temp_migration_route_enabled' => env('SAMY_TEMP_MIGRATION_ROUTE_ENABLED', false),
+    'temp_migration_route_token' => env('SAMY_TEMP_MIGRATION_ROUTE_TOKEN', ''),
 ];

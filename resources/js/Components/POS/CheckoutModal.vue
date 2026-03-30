@@ -25,7 +25,7 @@ watch(() => props.show, (v) => { if (v) reset(); });
 
 watch(paymentMode, () => {
     paymentError.value = '';
-    cashReceived.value = '';
+    cashReceived.value = fmt(props.total);
     if (paymentMode.value === 'mixed') {
         paymentLines.value = [
             { method: 'cash',   amount: '' },
@@ -58,12 +58,27 @@ function removePaymentLine(idx) {
 function reset() {
     paymentMode.value  = 'cash';
     paymentLines.value = [{ method: 'cash', amount: fmt(props.total) }];
-    cashReceived.value = '';
+    cashReceived.value = fmt(props.total);
     paymentError.value = '';
 }
 
 function validate() {
     paymentError.value = '';
+
+    if (paymentMode.value === 'cash') {
+        const received = Number(cashReceived.value || 0);
+
+        if (!Number.isFinite(received) || received <= 0) {
+            paymentError.value = 'Captura un monto valido en dinero recibido.';
+            return false;
+        }
+
+        if (Number(received.toFixed(2)) < Number(props.total.toFixed(2))) {
+            paymentError.value = `El dinero recibido (${money(received)}) no puede ser menor al total (${money(props.total)}).`;
+            return false;
+        }
+    }
+
     if (paymentMode.value === 'mixed') {
         const lines = paymentLines.value.filter(p => Number(p.amount || 0) > 0);
         if (!lines.length) { paymentError.value = 'Agrega al menos un pago con monto.'; return false; }
@@ -85,9 +100,24 @@ function buildPayments() {
     return [{ method: paymentMode.value, amount: props.total }];
 }
 
+function resolveDineroRecibido() {
+    if (paymentMode.value === 'cash') {
+        return Number(Number(cashReceived.value || 0).toFixed(2));
+    }
+
+    if (paymentMode.value === 'mixed') {
+        return Number(paymentsSum().toFixed(2));
+    }
+
+    return Number(Number(props.total || 0).toFixed(2));
+}
+
 function submit() {
     if (!validate()) return;
-    emit('confirm', { payments: buildPayments() });
+    emit('confirm', {
+        payments: buildPayments(),
+        dinero_recibido: resolveDineroRecibido(),
+    });
 }
 
 const methodLabels = { cash: 'Efectivo', card: 'Tarjeta', transfer: 'Transferencia' };

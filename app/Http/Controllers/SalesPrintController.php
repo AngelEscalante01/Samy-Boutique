@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Sale;
 use App\Models\SalePrintAudit;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -40,18 +41,31 @@ class SalesPrintController extends Controller
         $total = (float) $sale->total;
         $discount = max(0, $subtotal - $total);
 
-        // Si en el futuro estos campos existen en sales, se priorizan sobre cálculo derivado.
-        $storedCashReceived = (float) ($sale->cash_received ?? 0);
+        $storedCashReceived = $sale->cash_received;
         $derivedCashReceived = (float) $sale->payments
             ->where('method', 'cash')
             ->sum('amount');
 
-        $cashReceived = $storedCashReceived > 0 ? $storedCashReceived : $derivedCashReceived;
+        $fallbackCashReceived = $derivedCashReceived > 0
+            ? $derivedCashReceived
+            : $total;
+
+        $cashReceived = ($storedCashReceived !== null && (float) $storedCashReceived > 0)
+            ? (float) $storedCashReceived
+            : $fallbackCashReceived;
+
+        $cashReceived = max(0, $this->money($cashReceived));
 
         $storedChange = $sale->change;
-        $change = $storedChange !== null
+        $change = ($storedChange !== null && (float) $storedChange > 0)
             ? (float) $storedChange
             : max(0, round($cashReceived - $total, 2));
+
+        if ($cashReceived > $total && $change <= 0) {
+            $change = $cashReceived - $total;
+        }
+
+        $change = max(0, $this->money($change));
 
         $items = $sale->items->map(function ($item) {
             $qty = (int) ($item->qty ?? $item->quantity ?? 1);
@@ -71,15 +85,15 @@ class SalesPrintController extends Controller
         return response()->json([
             'store' => 'SAMY BOUTIQUE',
             'folio' => (string) $sale->id,
-            'date' => optional($sale->created_at)?->toIso8601String(),
+            'date' => $this->formatTicketDate($sale),
             'customer' => (string) ($sale->customer?->name ?? 'Mostrador'),
             'items' => $items,
             'subtotal' => $this->money($subtotal),
             'discount' => $this->money($discount),
             'total' => $this->money($total),
             'payment_method' => $paymentMethod,
-            'cash_received' => $rawPaymentMethod === 'cash' ? $this->money($cashReceived) : 0.0,
-            'change' => $rawPaymentMethod === 'cash' ? $this->money($change) : 0.0,
+            'cash_received' => $cashReceived,
+            'change' => $change,
             'meta' => [
                 'sale_id' => $sale->id,
                 'ticket_type' => 'sale',
@@ -101,6 +115,19 @@ class SalesPrintController extends Controller
     private function money(mixed $value): float
     {
         return round((float) $value, 2);
+    }
+
+    private function formatTicketDate(Sale $sale): string
+    {
+        $timezone = (string) config('app.timezone', 'America/Mexico_City');
+
+        $sourceDate = $sale->created_at
+            ? Carbon::parse($sale->created_at)
+            : now($timezone);
+
+        return $sourceDate
+            ->setTimezone($timezone)
+            ->format('d/m/Y H:i');
     }
 
     public function storeAudit(Sale $sale, Request $request): JsonResponse

@@ -516,7 +516,7 @@ const total = computed(() => {
     return computedTotalWithoutCoupon.value;
 });
 
-function buildSalePayload(payments = [], customerId = null) {
+function buildSalePayload(payments = [], customerId = null, dineroRecibido = null) {
     const items = cart.value.map((item) => {
         const p = {
             variant_id: item.variant.id,
@@ -530,6 +530,9 @@ function buildSalePayload(payments = [], customerId = null) {
     });
 
     const payload = { customer_id: customerId, items, payments };
+    if (dineroRecibido !== null && dineroRecibido !== '') {
+        payload.dinero_recibido = Number(dineroRecibido);
+    }
     if (canDiscount.value && globalDiscountType.value && Number(globalDiscountValue.value ?? 0) > 0) {
         payload.global_discount_type  = globalDiscountType.value;
         payload.global_discount_value = Number(globalDiscountValue.value);
@@ -590,6 +593,7 @@ const form = useForm({
     global_discount_value: null,
     coupon_code: null,
     payments: [],
+    dinero_recibido: null,
 });
 
 async function resolveServerCheckoutTotal() {
@@ -629,7 +633,7 @@ async function openCheckout() {
     checkoutOpen.value = true;
 }
 
-async function onCheckoutConfirm({ payments }) {
+async function onCheckoutConfirm({ payments, dinero_recibido }) {
     clearAlert();
 
     const printerCheck = validatePrinterReadyForCheckout();
@@ -638,7 +642,11 @@ async function onCheckoutConfirm({ payments }) {
         showAlert(printerCheck.message, 'warning');
     }
 
-    const payload = buildSalePayload(payments, selectedCustomer.value?.id ?? null);
+    const payload = buildSalePayload(
+        payments,
+        selectedCustomer.value?.id ?? null,
+        dinero_recibido,
+    );
 
     if (isOffline.value) {
         try {
@@ -665,6 +673,7 @@ async function onCheckoutConfirm({ payments }) {
     form.global_discount_value = payload.global_discount_value ?? null;
     form.coupon_code           = payload.coupon_code           ?? null;
     form.payments              = payload.payments;
+    form.dinero_recibido       = payload.dinero_recibido ?? null;
     form.clearErrors();
 
     form.post(route('sales.store'), {

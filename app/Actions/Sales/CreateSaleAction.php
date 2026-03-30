@@ -273,6 +273,25 @@ class CreateSaleAction
             $paymentsTotalCents = $this->toMoneyCents($paymentsTotalRounded);
             $saleTotalCents = $this->toMoneyCents($saleTotalRounded);
 
+            $dineroRecibidoRaw = Arr::get($payload, 'dinero_recibido');
+            if ($dineroRecibidoRaw === null || $dineroRecibidoRaw === '') {
+                throw ValidationException::withMessages([
+                    'dinero_recibido' => ['El dinero recibido es obligatorio.'],
+                ]);
+            }
+
+            $dineroRecibido = round($this->toMoneyFloat($dineroRecibidoRaw), 2);
+            $dineroRecibidoCents = $this->toMoneyCents($dineroRecibido);
+
+            if ($dineroRecibidoCents < $saleTotalCents) {
+                throw ValidationException::withMessages([
+                    'dinero_recibido' => ['El dinero recibido debe ser mayor o igual al total de la venta.'],
+                ]);
+            }
+
+            $cambioCents = max(0, $dineroRecibidoCents - $saleTotalCents);
+            $cambio = round($cambioCents / 100, 2);
+
             if ($paymentsTotalCents !== $saleTotalCents) {
                 throw ValidationException::withMessages([
                     'payments' => ['El total de pagos debe coincidir exactamente con el total de la venta.'],
@@ -288,6 +307,8 @@ class CreateSaleAction
                 'loyalty_discount_total' => $loyaltyDiscountTotal,
                 'loyalty_applied' => $loyaltyApplied,
                 'total' => number_format($total, 2, '.', ''),
+                'cash_received' => number_format($dineroRecibido, 2, '.', ''),
+                'change' => number_format($cambio, 2, '.', ''),
                 'global_discount_type' => $globalDiscountType,
                 'global_discount_value' => $globalDiscountValue,
                 'coupon_code' => $coupon ? $coupon->code : null,
