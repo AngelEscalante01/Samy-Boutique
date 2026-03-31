@@ -11,7 +11,7 @@ import {
     saveSnapshot,
 } from '@/offline/snapshot';
 import { getPendingCounts, getUnsyncedSoldSkus, queueSale, syncAll } from '@/offline/sync';
-import { printSale, validatePrinterReadyForCheckout } from '@/services/printSale';
+import { openPrinterSettings, printSale, validatePrinterReadyForCheckout } from '@/services/printSale';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
@@ -105,8 +105,22 @@ const displayedCategories = computed(() => {
 
 const lastSnapshotAt = computed(() => snapshotMeta.value?.generated_at ?? null);
 
-// ── Tabs móvil ────────────────────────────────────────────────────────────────
-const mobileTab = ref('products');
+// ── Drawer carrito (tablet/móvil) ────────────────────────────────────────────
+const cartDrawerOpen = ref(false);
+
+function openCartDrawer() {
+    cartDrawerOpen.value = true;
+}
+
+function closeCartDrawer() {
+    cartDrawerOpen.value = false;
+}
+
+watch(cartDrawerOpen, (isOpen) => {
+    if (typeof document === 'undefined') return;
+
+    document.body.classList.toggle('overflow-hidden', isOpen);
+});
 
 const variantSelectorOpen = ref(false);
 const selectedProductForVariant = ref(null);
@@ -134,6 +148,17 @@ function showAlert(message, type = 'error') {
 
 function clearAlert() {
     printAlert.value = null;
+}
+
+function handlePrinterSettingsClick() {
+    const result = openPrinterSettings();
+
+    if (result.ok) {
+        showToast(result.message || 'Abriendo configuracion de impresora...');
+        return;
+    }
+
+    showToast(result.message || 'No se pudo abrir la configuracion de impresora.', 'error');
 }
 
 async function refreshPendingCounts() {
@@ -291,6 +316,10 @@ onMounted(async () => {
 onBeforeUnmount(() => {
     window.removeEventListener('online', handleOnline);
     window.removeEventListener('offline', handleOffline);
+
+    if (typeof document !== 'undefined') {
+        document.body.classList.remove('overflow-hidden');
+    }
 });
 
 // ── Carrito ───────────────────────────────────────────────────────────────────
@@ -322,7 +351,7 @@ function addToCart(product, variant, qty = 1) {
         });
     }
 
-    if (mobileTab.value === 'products') uiMessage.value = `"${product.name}" agregado.`;
+    uiMessage.value = `"${product.name}" agregado.`;
 }
 
 function openVariantSelector(product) {
@@ -629,6 +658,7 @@ async function openCheckout() {
         showToast('Aplica el cupón antes de cobrar.', 'error'); return;
     }
 
+    closeCartDrawer();
     checkoutTotal.value = await resolveServerCheckoutTotal();
     checkoutOpen.value = true;
 }
@@ -739,38 +769,29 @@ async function onCheckoutConfirm({ payments, dinero_recibido }) {
         </div>
     </transition>
 
-    <!-- Mobile tabs -->
-    <div class="sticky top-0 z-20 border-b border-stone-200 bg-white px-4 py-2 lg:hidden">
-        <div class="grid grid-cols-2 gap-1 rounded-xl bg-stone-100 p-1">
-            <button
-                type="button"
-                class="rounded-lg py-2 text-sm font-semibold transition-all duration-200"
-                :class="mobileTab === 'products' ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500 hover:text-stone-700'"
-                @click="mobileTab = 'products'"
-            >
-                Productos
-            </button>
-            <button
-                type="button"
-                class="relative rounded-lg py-2 text-sm font-semibold transition-all duration-200"
-                :class="mobileTab === 'cart' ? 'bg-white shadow-sm text-stone-900' : 'text-stone-500 hover:text-stone-700'"
-                @click="mobileTab = 'cart'"
-            >
-                Carrito
-                <span v-if="cart.length" class="ml-1.5 inline-flex items-center justify-center rounded-full bg-zinc-900 px-1.5 py-0.5 text-xs font-bold text-white">
-                    {{ cart.length }}
-                </span>
-            </button>
-        </div>
-    </div>
+    <!-- Botón flotante carrito (tablet/móvil) -->
+    <button
+        type="button"
+        class="fixed bottom-4 right-4 z-40 inline-flex items-center gap-2 rounded-2xl bg-zinc-900 px-4 py-3 text-sm font-bold text-white shadow-xl 2xl:hidden"
+        @click="openCartDrawer"
+    >
+        <span>Carrito ({{ cart.length }})</span>
+        <span class="rounded-full bg-white/15 px-2 py-1 text-xs">{{ money(total) }}</span>
+    </button>
+
+    <!-- Overlay del drawer -->
+    <div
+        v-if="cartDrawerOpen"
+        class="fixed inset-0 z-50 bg-black/45 2xl:hidden"
+        @click="closeCartDrawer"
+    />
 
     <!-- Main layout -->
-    <div class="flex h-[calc(100vh-8rem)] overflow-hidden lg:grid lg:h-auto lg:grid-cols-12 lg:gap-4 lg:overflow-visible lg:px-4 lg:pb-4">
+    <div class="flex h-[calc(100vh-8rem)] overflow-hidden 2xl:grid 2xl:h-auto 2xl:grid-cols-12 2xl:gap-4 2xl:overflow-visible 2xl:px-4 2xl:pb-4">
 
         <!-- LEFT: Catálogo -->
         <section
-            class="flex flex-1 flex-col overflow-y-auto lg:col-span-9 lg:h-[calc(100vh-120px)] lg:min-h-0 lg:rounded-2xl lg:border lg:border-stone-200 lg:bg-white"
-            :class="mobileTab === 'cart' ? 'hidden lg:flex' : 'flex'"
+            class="flex flex-1 flex-col overflow-y-auto 2xl:col-span-9 2xl:h-[calc(100vh-120px)] 2xl:min-h-0 2xl:rounded-2xl 2xl:border 2xl:border-stone-200 2xl:bg-white"
         >
             <!-- Barra de búsqueda + filtros -->
             <div class="sticky top-0 z-10 space-y-2.5 border-b border-stone-200 bg-white/95 backdrop-blur-sm px-4 py-3">
@@ -809,6 +830,18 @@ async function onCheckoutConfirm({ payments, dinero_recibido }) {
                         @click="router.visit(route('sync.index'))"
                     >
                         Ver pendientes
+                    </button>
+
+                    <button
+                        type="button"
+                        class="inline-flex items-center gap-1.5 rounded-full border border-stone-300 px-3 py-1 text-xs font-semibold text-stone-700 transition hover:bg-stone-100"
+                        @click="handlePrinterSettingsClick"
+                    >
+                        <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <circle cx="12" cy="12" r="3" />
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.03a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.03a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.03a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                        </svg>
+                        Config. impresora
                     </button>
                 </div>
 
@@ -947,21 +980,32 @@ async function onCheckoutConfirm({ payments, dinero_recibido }) {
 
         <!-- RIGHT: Carrito -->
         <aside
-            class="flex w-full flex-col bg-white lg:col-span-3 lg:w-auto lg:self-start lg:sticky lg:top-4"
-            :class="mobileTab === 'products' ? 'hidden lg:flex' : 'flex'"
+            class="flex w-full flex-col bg-white transition-transform duration-300 ease-out 2xl:z-auto 2xl:col-span-3 2xl:w-auto 2xl:h-auto 2xl:max-h-none 2xl:max-w-none 2xl:self-start 2xl:sticky 2xl:top-4 2xl:translate-x-0"
+            :class="cartDrawerOpen
+                ? 'fixed right-0 top-0 z-[60] h-full max-h-screen w-full max-w-xl translate-x-0 shadow-2xl'
+                : 'fixed right-0 top-0 z-[60] h-full max-h-screen w-full max-w-xl translate-x-full shadow-2xl 2xl:shadow-none'"
         >
-            <div class="flex h-full flex-col border-l border-stone-200 lg:max-h-[calc(100vh-120px)] lg:rounded-2xl lg:border lg:border-stone-200 lg:shadow-sm">
+            <div class="flex h-full flex-col border-l border-stone-200 2xl:max-h-[calc(100vh-120px)] 2xl:rounded-2xl 2xl:border 2xl:border-stone-200 2xl:shadow-sm">
                 <!-- Header carrito -->
                 <div class="flex items-center justify-between border-b border-stone-200 bg-stone-50/40 px-4 py-3">
                     <div>
                         <h2 class="text-sm font-semibold tracking-wide text-stone-900">Carrito</h2>
                         <p class="text-xs text-stone-400">{{ cart.length }} {{ cart.length === 1 ? 'producto' : 'productos' }}</p>
                     </div>
-                    <button v-if="cart.length" type="button"
-                        class="rounded-xl border border-stone-200 px-3 py-1.5 text-xs font-medium text-stone-500 hover:bg-stone-100 transition-colors duration-200"
-                        @click="clearCart">
-                        Vaciar
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button v-if="cart.length" type="button"
+                            class="rounded-xl border border-stone-200 px-3 py-2 text-xs font-medium text-stone-500 hover:bg-stone-100 transition-colors duration-200"
+                            @click="clearCart">
+                            Vaciar
+                        </button>
+                        <button
+                            type="button"
+                            class="rounded-xl border border-stone-200 px-3 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-100 2xl:hidden"
+                            @click="closeCartDrawer"
+                        >
+                            Cerrar
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Contenido scrolleable del carrito -->
@@ -1020,16 +1064,16 @@ async function onCheckoutConfirm({ payments, dinero_recibido }) {
                                 <div class="mt-1 flex items-center justify-between text-xs text-gray-500">
                                     <span>Cantidad</span>
                                     <div class="inline-flex items-center gap-2">
-                                        <button type="button" class="rounded border border-stone-200 px-2 py-0.5" @click="decrementQty(item.variant.id)">-</button>
+                                        <button type="button" class="rounded border border-stone-200 px-3 py-1.5 text-sm font-semibold" @click="decrementQty(item.variant.id)">-</button>
                                         <input
                                             :value="item.qty"
                                             type="number"
                                             min="1"
                                             :max="item.variant.stock"
-                                            class="w-14 rounded border border-stone-200 px-1 py-0.5 text-center"
+                                            class="h-9 w-16 rounded border border-stone-200 px-1 py-1 text-center text-sm"
                                             @input="setQty(item.variant.id, Number($event.target.value))"
                                         >
-                                        <button type="button" class="rounded border border-stone-200 px-2 py-0.5" @click="incrementQty(item.variant.id)">+</button>
+                                        <button type="button" class="rounded border border-stone-200 px-3 py-1.5 text-sm font-semibold" @click="incrementQty(item.variant.id)">+</button>
                                     </div>
                                 </div>
                                 <div class="mt-1 flex items-center justify-between text-xs text-gray-500">
@@ -1043,7 +1087,7 @@ async function onCheckoutConfirm({ payments, dinero_recibido }) {
                         <div v-if="canDiscount" class="mt-2 flex gap-2">
                             <select
                                 v-model="item.discount_type"
-                                class="flex-1 rounded-xl border border-stone-300 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-amber-400 focus:border-amber-400"
+                                class="flex-1 rounded-xl border border-stone-300 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-amber-400 focus:border-amber-400"
                             >
                                 <option :value="null">Sin descuento</option>
                                 <option value="amount">$ Monto</option>
@@ -1055,7 +1099,7 @@ async function onCheckoutConfirm({ payments, dinero_recibido }) {
                                 step="0.01"
                                 min="0"
                                 placeholder="0"
-                                class="w-20 rounded-xl border border-stone-300 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-amber-400 focus:border-amber-400"
+                                class="w-24 rounded-xl border border-stone-300 py-2.5 text-sm text-right focus:outline-none focus:ring-1 focus:ring-amber-400 focus:border-amber-400"
                             />
                         </div>
                     </div>
@@ -1063,10 +1107,10 @@ async function onCheckoutConfirm({ payments, dinero_recibido }) {
                     <!-- Descuento global -->
                     <div v-if="canDiscount && cart.length">
                         <p class="mb-1.5 text-xs font-semibold uppercase tracking-widest text-stone-400">Descuento global</p>
-                        <div class="flex gap-2">
+                        <div class="flex flex-col gap-2 sm:flex-row">
                             <select
                                 v-model="globalDiscountType"
-                                class="flex-1 rounded-xl border border-stone-300 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-amber-400"
+                                class="flex-1 rounded-xl border border-stone-300 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-amber-400"
                             >
                                 <option :value="null">Sin descuento</option>
                                 <option value="amount">$ Monto</option>
@@ -1078,7 +1122,7 @@ async function onCheckoutConfirm({ payments, dinero_recibido }) {
                                 step="0.01"
                                 min="0"
                                 placeholder="0"
-                                class="w-24 rounded-xl border border-stone-300 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-amber-400"
+                                class="w-full rounded-xl border border-stone-300 py-2.5 text-sm text-right focus:outline-none focus:ring-1 focus:ring-amber-400 sm:w-28"
                             />
                         </div>
                     </div>
@@ -1097,7 +1141,7 @@ async function onCheckoutConfirm({ payments, dinero_recibido }) {
                                 type="text"
                                 placeholder="Buscar por nombre o teléfono..."
                                 autocomplete="off"
-                                class="w-full rounded-xl border border-stone-300 py-2 pl-8 pr-7 text-sm focus:outline-none focus:ring-1 focus:ring-amber-400 focus:border-amber-400 transition"
+                                class="w-full rounded-xl border border-stone-300 py-2.5 pl-8 pr-7 text-sm focus:outline-none focus:ring-1 focus:ring-amber-400 focus:border-amber-400 transition"
                                 :class="selectedCustomer ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-white'"
                                 :disabled="!!selectedCustomer"
                             />
@@ -1145,16 +1189,16 @@ async function onCheckoutConfirm({ payments, dinero_recibido }) {
                     <!-- Cupón -->
                     <div v-if="canApplyCoupon && cart.length">
                         <p class="mb-1.5 text-xs font-semibold uppercase tracking-widest text-stone-400">Cupón</p>
-                        <div class="flex gap-2">
+                        <div class="flex flex-col gap-2 sm:flex-row">
                             <input
                                 v-model="couponCode"
                                 type="text"
                                 placeholder="Código"
-                                class="flex-1 rounded-xl border border-stone-300 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-amber-400 focus:border-amber-400"
+                                class="flex-1 rounded-xl border border-stone-300 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-amber-400 focus:border-amber-400"
                             />
                             <button
                                 type="button"
-                                class="rounded-xl bg-zinc-900 px-4 py-2 text-xs font-semibold text-white hover:bg-zinc-800 disabled:opacity-40 transition-colors duration-200"
+                                class="rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-zinc-800 disabled:opacity-40 transition-colors duration-200"
                                 :disabled="!couponCode.trim() || !cart.length"
                                 @click="applyCouponPreview"
                             >Aplicar</button>
@@ -1184,7 +1228,7 @@ async function onCheckoutConfirm({ payments, dinero_recibido }) {
 
                     <button
                         type="button"
-                        class="w-full rounded-xl bg-gray-900 py-3.5 text-sm font-bold tracking-wide text-white transition-colors hover:bg-gray-700 disabled:opacity-40"
+                        class="w-full rounded-xl bg-gray-900 py-4 text-base font-bold tracking-wide text-white transition-colors hover:bg-gray-700 disabled:opacity-40"
                         :disabled="cart.length === 0 || !canCreateSale"
                         @click="openCheckout"
                     >
