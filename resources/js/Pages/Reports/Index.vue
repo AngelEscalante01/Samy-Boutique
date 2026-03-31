@@ -1,529 +1,451 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { computed, ref } from 'vue'
 import { Head, Link, router } from '@inertiajs/vue3'
-import MetricCard    from '@/Components/Reports/MetricCard.vue'
-import BarChartSimple from '@/Components/Reports/BarChartSimple.vue'
 
-/* ── Props ───────────────────────────────────────────────────────────────── */
 const props = defineProps({
-  filters:              { type: Object, default: () => ({}) },
-  salesSummary:         { type: Object, default: () => ({}) },
-  salesByDay:           { type: Array,  default: () => [] },
-  topCategories:        { type: Array,  default: () => [] },
-  topProducts:          { type: Array,  default: () => [] },
-  inventoryCounts:      { type: Object, default: () => ({}) },
-  topCustomers:         { type: Array,  default: () => [] },
-  nearLoyaltyCustomers: { type: Array,  default: () => [] },
+  filters: { type: Object, default: () => ({}) },
+  salesSummary: { type: Object, default: () => ({}) },
+  dailySummary: { type: Array, default: () => [] },
+  topCategories: { type: Array, default: () => [] },
+  topProducts: { type: Array, default: () => [] },
+  topCustomers: { type: Array, default: () => [] },
+  nearLoyaltyCustomers: { type: Array, default: () => [] },
 })
 
-/* ── Tabs ────────────────────────────────────────────────────────────────── */
-const TABS = [
-  { key: 'sales',    label: 'Ventas'    },
+const tabs = [
+  { key: 'sales', label: 'Ventas' },
   { key: 'products', label: 'Productos' },
-  { key: 'customers',label: 'Clientes'  },
+  { key: 'customers', label: 'Clientes' },
 ]
+
 const activeTab = ref('sales')
 
-/* ── Filtros locales ─────────────────────────────────────────────────────── */
-const localFrom  = ref(props.filters?.from ?? '')
-const localTo    = ref(props.filters?.to   ?? '')
-const applying   = ref(false)
+const localFrom = ref(props.filters.from ?? '')
+const localTo = ref(props.filters.to ?? '')
+const applying = ref(false)
+
+const chartRows = computed(() => props.dailySummary.slice(-31))
+
+const chartMax = computed(() => {
+  const values = chartRows.value.flatMap((row) => [
+    Number(row.total_sold ?? 0),
+    Number(row.profit_total ?? 0),
+  ])
+
+  return Math.max(1, ...values)
+})
+
+const hasRange = computed(() => !!(props.filters.from && props.filters.to))
+
+const kpis = computed(() => [
+  {
+    key: 'total_sold',
+    label: 'Total vendido',
+    value: money(props.salesSummary.total_sold),
+    sub: `${Number(props.salesSummary.sales_count ?? 0).toLocaleString('es-MX')} ventas`,
+    color: 'text-emerald-700',
+    bg: 'bg-emerald-50 ring-emerald-100',
+    compact: false,
+  },
+  {
+    key: 'profit_total',
+    label: 'Ganancia total',
+    value: money(props.salesSummary.profit_total),
+    sub: 'Margen real del periodo',
+    color: 'text-emerald-700',
+    bg: 'bg-emerald-100 ring-emerald-200',
+    compact: false,
+    highlight: true,
+  },
+  {
+    key: 'avg_ticket',
+    label: 'Ticket promedio',
+    value: money(props.salesSummary.avg_ticket),
+    sub: 'Promedio por venta',
+    color: 'text-sky-700',
+    bg: 'bg-sky-50 ring-sky-100',
+    compact: true,
+  },
+  {
+    key: 'manual_discount_total',
+    label: 'Descuentos manuales',
+    value: money(props.salesSummary.manual_discount_total),
+    sub: 'Aplicados en caja',
+    color: 'text-amber-700',
+    bg: 'bg-amber-50 ring-amber-100',
+    compact: true,
+  },
+  {
+    key: 'coupon_discount_total',
+    label: 'Descuentos cupones',
+    value: money(props.salesSummary.coupon_discount_total),
+    sub: 'Promociones por codigo',
+    color: 'text-violet-700',
+    bg: 'bg-violet-50 ring-violet-100',
+    compact: true,
+  },
+  {
+    key: 'loyalty_discount_total',
+    label: 'Descuentos fidelidad',
+    value: money(props.salesSummary.loyalty_discount_total),
+    sub: 'Beneficios a clientes',
+    color: 'text-indigo-700',
+    bg: 'bg-indigo-50 ring-indigo-100',
+    compact: true,
+  },
+  {
+    key: 'canceled_count',
+    label: 'Canceladas',
+    value: Number(props.salesSummary.canceled_count ?? 0).toLocaleString('es-MX'),
+    sub: 'Ventas anuladas',
+    color: 'text-rose-700',
+    bg: 'bg-rose-50 ring-rose-100',
+    compact: true,
+  },
+])
+
+function money(value) {
+  return new Intl.NumberFormat('es-MX', {
+    style: 'currency',
+    currency: 'MXN',
+    maximumFractionDigits: 2,
+  }).format(Number(value ?? 0))
+}
+
+function shortMoney(value) {
+  return Number(value ?? 0).toLocaleString('es-MX', {
+    maximumFractionDigits: 0,
+  })
+}
+
+function fmtDate(dateString) {
+  if (!dateString) return '—'
+
+  return new Date(`${dateString}T00:00:00`).toLocaleDateString('es-MX', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+function barHeight(value) {
+  const amount = Number(value ?? 0)
+  const ratio = (amount / chartMax.value) * 100
+  return `${Math.max(4, Math.round(ratio))}%`
+}
 
 function applyFilters() {
   applying.value = true
-  router.get(route('reports.index'), { from: localFrom.value, to: localTo.value }, {
+
+  router.get(route('reports.index'), {
+    from: localFrom.value,
+    to: localTo.value,
+  }, {
+    preserveState: false,
     preserveScroll: false,
-    preserveState:  false,
-    onFinish: () => { applying.value = false },
+    onFinish: () => {
+      applying.value = false
+    },
   })
 }
 
 function quickToday() {
   const today = new Date().toISOString().slice(0, 10)
   localFrom.value = today
-  localTo.value   = today
+  localTo.value = today
   applyFilters()
 }
 
 function quickMonth() {
-  const now   = new Date()
+  const now = new Date()
   const first = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
-  const last  = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10)
+  const last = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().slice(0, 10)
+
   localFrom.value = first
-  localTo.value   = last
+  localTo.value = last
   applyFilters()
 }
 
 function clearFilters() {
-  const today = new Date().toISOString().slice(0, 10)
-  const first = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10)
-  localFrom.value = first
-  localTo.value   = today
+  const now = new Date()
+  localFrom.value = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10)
+  localTo.value = now.toISOString().slice(0, 10)
   applyFilters()
 }
 
-/* ── Helpers ─────────────────────────────────────────────────────────────── */
-function money(v) {
-  return Number(v ?? 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
-function fmtDate(iso) {
-  if (!iso) return '—'
-  return new Date(iso + 'T00:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: 'short' })
+function exportPdf() {
+  window.alert('Exportacion PDF disponible proximamente.')
 }
 
-/* ── Gráfico ─────────────────────────────────────────────────────────────── */
-const chartData = computed(() =>
-  props.salesByDay.slice(-30).map(d => ({ label: fmtDate(d.date), value: d.total }))
-)
-
-/* ── Exportar (placeholder) ──────────────────────────────────────────────── */
-function exportPDF()   { alert('Exportación PDF próximamente.') }
-function exportExcel() { alert('Exportación Excel próximamente.') }
+function exportExcel() {
+  window.alert('Exportacion Excel disponible proximamente.')
+}
 </script>
 
 <template>
   <Head title="Reportes" />
 
-  <div class="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8 space-y-6">
-
-    <!-- ── Breadcrumb ──────────────────────────────────────────────────────── -->
-    <nav class="flex items-center gap-2 text-sm text-gray-500">
-      <Link :href="route('dashboard')" class="hover:text-gray-700 transition-colors">Inicio</Link>
-      <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-      </svg>
-      <span class="font-medium text-gray-700">Reportes</span>
-    </nav>
-
-    <!-- ── Encabezado ─────────────────────────────────────────────────────── -->
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+  <div class="mx-auto max-w-7xl space-y-4 px-4 py-4 sm:px-6 lg:px-8">
+    <section class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-[0_10px_30px_-24px_rgba(15,23,42,1)]">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">Reportes</h1>
-        <p class="mt-1 text-sm text-gray-500">Analiza ventas, descuentos y rendimiento</p>
+        <h1 class="text-2xl font-bold tracking-tight text-slate-900">Reportes</h1>
+        <p class="mt-0.5 text-sm text-slate-500">Analiza ventas, descuentos, ganancias y rendimiento</p>
       </div>
-      <!-- Exportar -->
+
       <div class="flex items-center gap-2">
-        <button type="button" @click="exportPDF"
-          class="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2
-                 text-xs font-medium text-gray-600 shadow-sm hover:bg-gray-50 transition-colors">
-          <svg class="h-3.5 w-3.5 text-red-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round"
-              d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375
-                 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125
-                 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0
-                 0-9-9Z" />
-          </svg>
+        <button
+          type="button"
+          class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+          @click="exportPdf"
+        >
           PDF
         </button>
-        <button type="button" @click="exportExcel"
-          class="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-2
-                 text-xs font-medium text-gray-600 shadow-sm hover:bg-gray-50 transition-colors">
-          <svg class="h-3.5 w-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round"
-              d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12
-                 16.5m0 0L7.5 12m4.5 4.5V3" />
-          </svg>
+        <button
+          type="button"
+          class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+          @click="exportExcel"
+        >
           Excel
         </button>
       </div>
-    </div>
+    </section>
 
-    <!-- ── Panel de filtros ───────────────────────────────────────────────── -->
-    <div class="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 px-5 py-4">
-      <div class="flex flex-wrap items-end gap-3">
-        <!-- Desde -->
-        <div class="flex flex-col gap-1">
-          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Desde</label>
+    <section class="rounded-2xl border border-slate-200 bg-white px-3.5 py-3 shadow-[0_10px_30px_-24px_rgba(15,23,42,1)] sm:px-4">
+      <div class="flex flex-wrap items-end gap-2">
+        <div class="flex min-w-[170px] flex-col gap-1">
+          <label class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Desde</label>
           <input
             v-model="localFrom"
             type="date"
-            class="rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm
-                   focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
-          />
+            class="h-9 rounded-lg border border-slate-200 px-2.5 text-sm text-slate-700 focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
+          >
         </div>
-        <!-- Hasta -->
-        <div class="flex flex-col gap-1">
-          <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Hasta</label>
+
+        <div class="flex min-w-[170px] flex-col gap-1">
+          <label class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Hasta</label>
           <input
             v-model="localTo"
             type="date"
-            class="rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm
-                   focus:border-blue-500 focus:ring-1 focus:ring-blue-500 focus:outline-none"
-          />
-        </div>
-
-        <!-- Separador -->
-        <div class="flex items-end gap-2 pb-0.5">
-          <!-- Acceso rápido -->
-          <button type="button" @click="quickToday"
-            class="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600
-                   hover:bg-gray-100 transition-colors">
-            Hoy
-          </button>
-          <button type="button" @click="quickMonth"
-            class="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600
-                   hover:bg-gray-100 transition-colors">
-            Este mes
-          </button>
-          <button type="button" @click="clearFilters"
-            class="rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-500
-                   hover:bg-gray-100 transition-colors">
-            Limpiar
-          </button>
-
-          <!-- Aplicar -->
-          <button
-            type="button"
-            :disabled="applying"
-            class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold
-                   text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed
-                   transition-colors"
-            @click="applyFilters"
+            class="h-9 rounded-lg border border-slate-200 px-2.5 text-sm text-slate-700 focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
           >
-            <svg v-if="applying" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-            </svg>
-            {{ applying ? 'Cargando…' : 'Aplicar' }}
-          </button>
         </div>
 
-        <!-- Rango activo badge -->
-        <div class="ml-auto self-end text-xs text-gray-400 hidden sm:block">
-          {{ filters.from }} → {{ filters.to }}
-        </div>
+        <button
+          type="button"
+          class="inline-flex h-9 items-center rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+          @click="quickToday"
+        >
+          Hoy
+        </button>
+        <button
+          type="button"
+          class="inline-flex h-9 items-center rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+          @click="quickMonth"
+        >
+          Este mes
+        </button>
+        <button
+          type="button"
+          class="inline-flex h-9 items-center rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+          @click="clearFilters"
+        >
+          Limpiar
+        </button>
+
+        <button
+          type="button"
+          class="inline-flex h-9 items-center rounded-lg bg-slate-900 px-3.5 text-xs font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+          :disabled="applying"
+          @click="applyFilters"
+        >
+          {{ applying ? 'Aplicando...' : 'Aplicar' }}
+        </button>
+
+        <span v-if="hasRange" class="ml-auto rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">
+          Rango activo: {{ filters.from }} - {{ filters.to }}
+        </span>
       </div>
-    </div>
+    </section>
 
-    <!-- ── Tabs ───────────────────────────────────────────────────────────── -->
-    <div class="flex gap-1 rounded-xl bg-gray-100/70 p-1.5 w-fit">
-      <button
-        v-for="tab in TABS"
-        :key="tab.key"
-        type="button"
-        :class="[
-          activeTab === tab.key
-            ? 'bg-white text-gray-900 shadow-sm'
-            : 'text-gray-500 hover:text-gray-700 hover:bg-white/60',
-          'rounded-lg px-4 py-2 text-sm font-medium transition-colors'
-        ]"
-        @click="activeTab = tab.key"
-      >{{ tab.label }}</button>
-    </div>
+    <section class="rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-[0_10px_30px_-24px_rgba(15,23,42,1)]">
+      <div class="inline-flex w-full rounded-xl bg-slate-100 p-1 sm:w-auto">
+        <button
+          v-for="tab in tabs"
+          :key="tab.key"
+          type="button"
+          class="flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold tracking-wide transition sm:text-sm"
+          :class="activeTab === tab.key
+            ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200'
+            : 'text-slate-500 hover:text-slate-700'"
+          @click="activeTab = tab.key"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
+    </section>
 
-    <!-- ════════════════════════════════════════════════════════════════════
-         TAB: VENTAS
-    ═════════════════════════════════════════════════════════════════════════ -->
     <template v-if="activeTab === 'sales'">
+      <section class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <article
+          v-for="kpi in kpis"
+          :key="kpi.key"
+          class="rounded-xl border border-slate-200 bg-white px-3.5 py-3 ring-1"
+          :class="[kpi.bg, kpi.highlight ? 'xl:col-span-2' : '']"
+        >
+          <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{{ kpi.label }}</p>
+          <p class="mt-1.5 text-xl font-bold tracking-tight" :class="kpi.color">{{ kpi.value }}</p>
+          <p class="mt-1 text-xs text-slate-500">{{ kpi.sub }}</p>
+        </article>
+      </section>
 
-      <!-- Métricas -->
-      <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        <MetricCard
-          label="Total vendido"
-          :value="money(salesSummary.total)"
-          :sub="salesSummary.count + ' ventas'"
-          color="emerald"
-          is-money
-        />
-        <MetricCard
-          label="Ticket promedio"
-          :value="money(salesSummary.avg_ticket)"
-          color="blue"
-          is-money
-        />
-        <MetricCard
-          label="Desc. manuales"
-          :value="money(salesSummary.discounts_total)"
-          color="amber"
-          is-money
-        />
-        <MetricCard
-          label="Desc. cupones"
-          :value="money(salesSummary.coupons_total)"
-          color="purple"
-          is-money
-        />
-        <MetricCard
-          label="Desc. fidelidad"
-          :value="money(salesSummary.loyalty_total)"
-          color="blue"
-          is-money
-        />
-        <MetricCard
-          v-if="salesSummary.canceled_count > 0"
-          label="Canceladas"
-          :value="salesSummary.canceled_count"
-          color="red"
-        />
-      </div>
-
-      <!-- Gráfico de barras -->
-      <div v-if="chartData.length" class="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 px-5 py-4">
-        <h3 class="mb-4 text-sm font-semibold text-gray-700">
-          Ventas por día
-          <span class="ml-2 text-xs font-normal text-gray-400">(últimos {{ chartData.length }} días)</span>
-        </h3>
-        <BarChartSimple :data="chartData" color-class="bg-blue-500" height="h-28" />
-      </div>
-      <div v-else
-           class="flex items-center justify-center rounded-xl border-2 border-dashed border-gray-200
-                  bg-gray-50/50 py-10 text-sm text-gray-400">
-        Sin ventas en el rango seleccionado.
-      </div>
-
-      <!-- Tabla ventas por día -->
-      <div v-if="salesByDay.length" class="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-200">
-        <div class="border-b border-gray-100 bg-gray-50/50 px-5 py-3">
-          <h3 class="text-sm font-semibold text-gray-700">Resumen diario</h3>
-        </div>
-        <div class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-50 text-sm">
-            <thead>
-              <tr class="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                <th class="px-5 py-3 text-left">Fecha</th>
-                <th class="px-5 py-3 text-right">Ventas</th>
-                <th class="px-5 py-3 text-right">Total</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-50 bg-white">
-              <tr v-for="day in salesByDay" :key="day.date" class="hover:bg-gray-50/60 transition-colors">
-                <td class="px-5 py-3 font-medium text-gray-800">
-                  {{ new Date(day.date + 'T00:00:00').toLocaleDateString('es-MX', { weekday: 'short', day: '2-digit', month: 'short' }) }}
-                </td>
-                <td class="px-5 py-3 text-right text-gray-600 tabular-nums">{{ day.count }}</td>
-                <td class="px-5 py-3 text-right font-semibold tabular-nums text-gray-900">
-                  ${{ money(day.total) }}
-                </td>
-              </tr>
-            </tbody>
-            <!-- Total pie -->
-            <tfoot>
-              <tr class="border-t border-gray-200 bg-gray-50/80">
-                <td class="px-5 py-3 font-bold text-gray-900">Total</td>
-                <td class="px-5 py-3 text-right font-bold text-gray-900 tabular-nums">
-                  {{ salesByDay.reduce((a, d) => a + d.count, 0) }}
-                </td>
-                <td class="px-5 py-3 text-right font-bold text-gray-900 tabular-nums text-base">
-                  ${{ money(salesByDay.reduce((a, d) => a + d.total, 0)) }}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-      </div>
-
-    </template>
-
-    <!-- ════════════════════════════════════════════════════════════════════
-         TAB: PRODUCTOS
-    ═════════════════════════════════════════════════════════════════════════ -->
-    <template v-if="activeTab === 'products'">
-
-      <!-- Inventario counts -->
-      <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <MetricCard
-          label="Disponibles"
-          :value="inventoryCounts.available ?? 0"
-          :sub="'Productos con stock'"
-          color="emerald"
-        />
-        <MetricCard
-          label="En apartado"
-          :value="inventoryCounts.layaway ?? 0"
-          :sub="'Items en layaway activo'"
-          color="amber"
-        />
-      </div>
-
-      <!-- Top productos -->
-      <div class="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-200">
-        <div class="border-b border-gray-100 bg-gray-50/50 px-5 py-3 flex items-center justify-between">
-          <h3 class="text-sm font-semibold text-gray-700">Top productos vendidos</h3>
-          <span class="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-700">
-            {{ topProducts.length }}
-          </span>
+      <section class="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-[0_10px_30px_-24px_rgba(15,23,42,1)]">
+        <div class="mb-3 flex items-center justify-between">
+          <h3 class="text-sm font-semibold text-slate-800">Ventas y ganancias por dia</h3>
+          <div class="flex items-center gap-3 text-[11px] text-slate-500">
+            <span class="inline-flex items-center gap-1">
+              <span class="h-2 w-2 rounded-full bg-emerald-500" /> Ventas
+            </span>
+            <span class="inline-flex items-center gap-1">
+              <span class="h-2 w-2 rounded-full bg-sky-500" /> Ganancias
+            </span>
+          </div>
         </div>
 
-        <div v-if="!topProducts.length" class="px-5 py-8 text-center text-sm text-gray-400">
-          Sin datos en este rango.
-        </div>
-
-        <div v-else class="overflow-x-auto">
-          <table class="min-w-full divide-y divide-gray-50 text-sm">
-            <thead>
-              <tr class="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                <th class="px-5 py-3 text-left w-8">#</th>
-                <th class="px-5 py-3 text-left">Producto</th>
-                <th class="px-5 py-3 text-left">SKU</th>
-                <th class="px-5 py-3 text-right">Uds.</th>
-                <th class="px-5 py-3 text-right">Total</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-50 bg-white">
-              <tr
-                v-for="(p, i) in topProducts"
-                :key="p.sku + i"
-                class="hover:bg-gray-50/60 transition-colors"
-              >
-                <td class="px-5 py-3 text-gray-400 font-mono text-xs">{{ i + 1 }}</td>
-                <td class="px-5 py-3 font-medium text-gray-800 max-w-[240px] truncate">{{ p.name }}</td>
-                <td class="px-5 py-3 font-mono text-xs text-gray-500">{{ p.sku ?? '—' }}</td>
-                <td class="px-5 py-3 text-right tabular-nums text-gray-600">{{ p.qty }}</td>
-                <td class="px-5 py-3 text-right font-semibold tabular-nums text-gray-900">
-                  ${{ money(p.total) }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Top categorías -->
-      <div class="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-200">
-        <div class="border-b border-gray-100 bg-gray-50/50 px-5 py-3 flex items-center justify-between">
-          <h3 class="text-sm font-semibold text-gray-700">Top categorías</h3>
-          <span class="rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-700">
-            {{ topCategories.length }}
-          </span>
-        </div>
-
-        <div v-if="!topCategories.length" class="px-5 py-8 text-center text-sm text-gray-400">
-          Sin datos en este rango.
-        </div>
-
-        <div v-else>
-          <!-- Barras visuales proporcionales -->
-          <div class="px-5 pt-4 pb-2">
+        <div v-if="chartRows.length" class="overflow-x-auto pb-1">
+          <div class="flex min-w-max items-end gap-1" style="height: 180px">
             <div
-              v-for="(cat, i) in topCategories"
-              :key="cat.name + i"
-              class="mb-2.5"
+              v-for="row in chartRows"
+              :key="row.date"
+              class="group flex w-8 flex-col items-center"
             >
-              <div class="flex justify-between text-xs mb-0.5">
-                <span class="font-medium text-gray-700 truncate max-w-[160px]">{{ cat.name }}</span>
-                <span class="tabular-nums text-gray-500">${{ money(cat.total) }} · {{ cat.qty }} uds.</span>
-              </div>
-              <div class="h-2 w-full rounded-full bg-gray-100 overflow-hidden">
+              <div class="relative flex h-36 w-full items-end gap-0.5">
                 <div
-                  class="h-2 rounded-full bg-purple-500 transition-all duration-500"
-                  :style="{ width: Math.max(2, Math.round((cat.total / topCategories[0].total) * 100)) + '%' }"
+                  class="w-1/2 rounded-t-sm bg-emerald-500 transition-opacity group-hover:opacity-85"
+                  :style="{ height: barHeight(row.total_sold) }"
+                  :title="`${fmtDate(row.date)} Ventas: ${money(row.total_sold)}`"
+                />
+                <div
+                  class="w-1/2 rounded-t-sm bg-sky-500 transition-opacity group-hover:opacity-85"
+                  :style="{ height: barHeight(row.profit_total) }"
+                  :title="`${fmtDate(row.date)} Ganancia: ${money(row.profit_total)}`"
                 />
               </div>
+              <p class="mt-1 w-full truncate text-center text-[10px] text-slate-400">{{ fmtDate(row.date) }}</p>
             </div>
           </div>
         </div>
-      </div>
+        <div v-else class="flex h-28 items-center justify-center text-sm text-slate-400">
+          Sin informacion para el rango seleccionado.
+        </div>
+      </section>
 
+      <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_10px_30px_-24px_rgba(15,23,42,1)]">
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-slate-200">
+            <thead class="bg-slate-50/80">
+              <tr>
+                <th class="py-2.5 pl-4 pr-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Fecha</th>
+                <th class="px-2 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Ventas</th>
+                <th class="px-2 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Total vendido</th>
+                <th class="px-2 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Ganancia</th>
+                <th class="px-2 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Descuentos</th>
+                <th class="py-2.5 pl-2 pr-4 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Canceladas</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">
+              <tr v-if="dailySummary.length === 0">
+                <td colspan="6" class="px-5 py-10 text-center text-sm text-slate-400">Sin datos para el rango seleccionado.</td>
+              </tr>
+
+              <tr v-for="row in dailySummary" :key="row.date" class="transition-colors duration-150 hover:bg-slate-50/80">
+                <td class="py-2.5 pl-4 pr-2 text-sm font-medium text-slate-800">{{ fmtDate(row.date) }}</td>
+                <td class="px-2 py-2.5 text-right text-sm text-slate-600">{{ row.sales_count }}</td>
+                <td class="px-2 py-2.5 text-right text-sm font-semibold text-emerald-700">{{ money(row.total_sold) }}</td>
+                <td class="px-2 py-2.5 text-right text-sm font-semibold text-sky-700">{{ money(row.profit_total) }}</td>
+                <td class="px-2 py-2.5 text-right text-sm font-semibold text-violet-700">{{ money(row.discount_total) }}</td>
+                <td class="py-2.5 pl-2 pr-4 text-right text-sm font-semibold" :class="Number(row.canceled_count) > 0 ? 'text-rose-600' : 'text-slate-500'">
+                  {{ row.canceled_count }}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </template>
 
-    <!-- ════════════════════════════════════════════════════════════════════
-         TAB: CLIENTES
-    ═════════════════════════════════════════════════════════════════════════ -->
-    <template v-if="activeTab === 'customers'">
-
-      <!-- Top clientes -->
-      <div class="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-200">
-        <div class="border-b border-gray-100 bg-gray-50/50 px-5 py-3 flex items-center justify-between">
-          <h3 class="text-sm font-semibold text-gray-700">Clientes más activos</h3>
-          <span class="text-xs text-gray-400">en el rango seleccionado</span>
-        </div>
-
-        <div v-if="!topCustomers.length" class="px-5 py-8 text-center text-sm text-gray-400">
-          Sin datos de clientes en este rango.
-        </div>
-
-        <div v-else>
-          <!-- Desktop -->
-          <div class="hidden sm:block overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-50 text-sm">
+    <template v-if="activeTab === 'products'">
+      <section class="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        <article class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_10px_30px_-24px_rgba(15,23,42,1)]">
+          <div class="border-b border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm font-semibold text-slate-700">Top productos</div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-100">
               <thead>
-                <tr class="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                  <th class="px-5 py-3 text-left w-8">#</th>
-                  <th class="px-5 py-3 text-left">Cliente</th>
-                  <th class="px-5 py-3 text-left">Teléfono</th>
-                  <th class="px-5 py-3 text-right">Compras</th>
-                  <th class="px-5 py-3 text-right">Total gastado</th>
+                <tr class="text-xs uppercase tracking-wide text-slate-500">
+                  <th class="py-2.5 pl-4 pr-2 text-left">Producto</th>
+                  <th class="px-2 py-2.5 text-right">Uds.</th>
+                  <th class="py-2.5 pl-2 pr-4 text-right">Total</th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-gray-50 bg-white">
-                <tr
-                  v-for="(c, i) in topCustomers"
-                  :key="c.name + i"
-                  class="hover:bg-gray-50/60 transition-colors"
-                >
-                  <td class="px-5 py-3 text-gray-400 text-xs">{{ i + 1 }}</td>
-                  <td class="px-5 py-3 font-medium text-gray-800">{{ c.name }}</td>
-                  <td class="px-5 py-3 text-gray-500 font-mono text-xs">{{ c.phone ?? '—' }}</td>
-                  <td class="px-5 py-3 text-right tabular-nums text-gray-700">{{ c.purchases_in_range }}</td>
-                  <td class="px-5 py-3 text-right font-semibold tabular-nums text-gray-900">
-                    ${{ money(c.total_spent) }}
-                  </td>
+              <tbody class="divide-y divide-slate-100">
+                <tr v-if="topProducts.length === 0">
+                  <td colspan="3" class="px-4 py-8 text-center text-sm text-slate-400">Sin datos en el rango.</td>
+                </tr>
+                <tr v-for="item in topProducts" :key="`${item.sku}-${item.name}`" class="hover:bg-slate-50/70">
+                  <td class="py-2.5 pl-4 pr-2 text-sm font-medium text-slate-800">{{ item.name }}</td>
+                  <td class="px-2 py-2.5 text-right text-sm text-slate-600">{{ item.qty }}</td>
+                  <td class="py-2.5 pl-2 pr-4 text-right text-sm font-semibold text-emerald-700">{{ money(item.total) }}</td>
                 </tr>
               </tbody>
             </table>
           </div>
-          <!-- Móvil -->
-          <ul class="sm:hidden divide-y divide-gray-100">
-            <li v-for="(c, i) in topCustomers" :key="'mc' + i" class="flex items-center gap-3 px-4 py-3">
-              <span class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full
-                           bg-blue-50 text-xs font-bold text-blue-600">{{ i + 1 }}</span>
-              <div class="min-w-0 flex-1">
-                <p class="font-medium text-gray-800 truncate">{{ c.name }}</p>
-                <p class="text-xs text-gray-400">{{ c.purchases_in_range }} compras</p>
+        </article>
+
+        <article class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_10px_30px_-24px_rgba(15,23,42,1)]">
+          <div class="border-b border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm font-semibold text-slate-700">Top categorias</div>
+          <ul class="divide-y divide-slate-100">
+            <li v-if="topCategories.length === 0" class="px-4 py-8 text-center text-sm text-slate-400">Sin datos en el rango.</li>
+            <li v-for="item in topCategories" :key="item.name" class="flex items-center justify-between gap-2 px-4 py-2.5 hover:bg-slate-50/70">
+              <div>
+                <p class="text-sm font-medium text-slate-800">{{ item.name }}</p>
+                <p class="text-xs text-slate-500">{{ item.qty }} uds.</p>
               </div>
-              <span class="font-bold text-gray-900 text-sm flex-shrink-0">${{ money(c.total_spent) }}</span>
+              <p class="text-sm font-semibold text-emerald-700">{{ money(item.total) }}</p>
             </li>
           </ul>
-        </div>
-      </div>
-
-      <!-- Cerca del punto de fidelidad -->
-      <div class="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-amber-200">
-        <div class="border-b border-amber-100 bg-amber-50/40 px-5 py-3 flex items-center gap-2">
-          <svg class="h-4 w-4 text-amber-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round"
-              d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988
-                 l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586
-                 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1
-                 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
-          </svg>
-          <h3 class="text-sm font-semibold text-amber-700">Próximos a fidelidad</h3>
-          <span class="ml-auto rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700">
-            {{ nearLoyaltyCustomers.length }}
-          </span>
-        </div>
-
-        <div v-if="!nearLoyaltyCustomers.length" class="px-5 py-6 text-center text-sm text-gray-400">
-          Ningún cliente con 4 compras acumuladas actualmente.
-        </div>
-
-        <ul v-else class="divide-y divide-gray-50">
-          <li
-            v-for="c in nearLoyaltyCustomers"
-            :key="c.name"
-            class="flex items-center justify-between gap-3 px-5 py-3 hover:bg-amber-50/30 transition-colors"
-          >
-            <div>
-              <p class="font-medium text-gray-800 text-sm">{{ c.name }}</p>
-              <p class="text-xs text-gray-400">{{ c.phone ?? '—' }}</p>
-            </div>
-            <div class="flex items-center gap-3">
-              <!-- Progreso 4/5 -->
-              <div class="flex gap-1">
-                <span
-                  v-for="n in 5"
-                  :key="n"
-                  :class="n <= c.purchases_count ? 'bg-amber-400' : 'bg-gray-200'"
-                  class="h-2.5 w-2.5 rounded-full"
-                />
-              </div>
-              <span class="text-xs font-semibold text-amber-600">{{ c.purchases_count }}/5</span>
-            </div>
-          </li>
-        </ul>
-      </div>
-
+        </article>
+      </section>
     </template>
 
+    <template v-if="activeTab === 'customers'">
+      <section class="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        <article class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_10px_30px_-24px_rgba(15,23,42,1)]">
+          <div class="border-b border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm font-semibold text-slate-700">Clientes con mayor compra</div>
+          <ul class="divide-y divide-slate-100">
+            <li v-if="topCustomers.length === 0" class="px-4 py-8 text-center text-sm text-slate-400">Sin datos en el rango.</li>
+            <li v-for="item in topCustomers" :key="`${item.name}-${item.phone}`" class="flex items-center justify-between gap-2 px-4 py-2.5 hover:bg-slate-50/70">
+              <div>
+                <p class="text-sm font-medium text-slate-800">{{ item.name }}</p>
+                <p class="text-xs text-slate-500">{{ item.purchases_in_range }} compras</p>
+              </div>
+              <p class="text-sm font-semibold text-emerald-700">{{ money(item.total_spent) }}</p>
+            </li>
+          </ul>
+        </article>
+
+        <article class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_10px_30px_-24px_rgba(15,23,42,1)]">
+          <div class="border-b border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm font-semibold text-slate-700">Proximos a fidelidad</div>
+          <ul class="divide-y divide-slate-100">
+            <li v-if="nearLoyaltyCustomers.length === 0" class="px-4 py-8 text-center text-sm text-slate-400">No hay clientes proximos al beneficio.</li>
+            <li v-for="item in nearLoyaltyCustomers" :key="`${item.name}-${item.phone}`" class="flex items-center justify-between gap-2 px-4 py-2.5 hover:bg-slate-50/70">
+              <div>
+                <p class="text-sm font-medium text-slate-800">{{ item.name }}</p>
+                <p class="text-xs text-slate-500">{{ item.phone ?? 'Sin telefono' }}</p>
+              </div>
+              <span class="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">{{ item.purchases_count }}/5</span>
+            </li>
+          </ul>
+        </article>
+      </section>
+    </template>
   </div>
 </template>

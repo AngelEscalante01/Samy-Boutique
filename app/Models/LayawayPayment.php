@@ -12,6 +12,7 @@ class LayawayPayment extends Model
 
     protected $fillable = [
         'layaway_id',
+        'created_by',
         'method',
         'amount',
         'reference',
@@ -26,5 +27,10 @@ class LayawayPayment extends Model
     public function layaway(): BelongsTo
     {
         return $this->belongsTo(Layaway::class);
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 }

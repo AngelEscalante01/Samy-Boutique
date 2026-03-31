@@ -14,10 +14,11 @@ const summary = computed(() => ({
   date:                   props.cashCut.cut_date,
   sales_count:            props.parsedTotals?.sales_count            ?? 0,
   canceled_count:         props.parsedTotals?.canceled_count         ?? 0,
-  total_sales:            props.parsedTotals?.total_sales            ?? 0,
-  discount_manual_total:  props.parsedTotals?.discount_manual_total  ?? 0,
-  discount_coupon_total:  props.parsedTotals?.discount_coupon_total  ?? 0,
-  discount_loyalty_total: props.parsedTotals?.discount_loyalty_total ?? 0,
+  total_sales:            props.parsedTotals?.total_sales            ?? props.parsedTotals?.total_sold ?? props.parsedTotals?.total_sum ?? 0,
+  profit_total:           props.parsedTotals?.profit_total           ?? props.parsedTotals?.profit_sum ?? 0,
+  discount_manual_total:  props.parsedTotals?.discount_manual_total  ?? props.parsedTotals?.discount_sum ?? 0,
+  discount_coupon_total:  props.parsedTotals?.discount_coupon_total  ?? props.parsedTotals?.coupon_discount_sum ?? 0,
+  discount_loyalty_total: props.parsedTotals?.discount_loyalty_total ?? props.parsedTotals?.loyalty_discount_sum ?? 0,
 }))
 
 const payments = computed(() => {
@@ -131,15 +132,19 @@ function printPage() {
         </div>
         <div class="flex justify-between px-5 py-3">
           <dt class="text-gray-600">Descuentos manuales</dt>
-          <dd class="font-medium tabular-nums text-amber-600">- ${{ money(parsedTotals?.discount_manual_total) }}</dd>
+          <dd class="font-medium tabular-nums text-amber-600">- ${{ money(summary.discount_manual_total) }}</dd>
         </div>
         <div class="flex justify-between px-5 py-3">
           <dt class="text-gray-600">Descuentos por cupón</dt>
-          <dd class="font-medium tabular-nums text-purple-600">- ${{ money(parsedTotals?.discount_coupon_total) }}</dd>
+          <dd class="font-medium tabular-nums text-purple-600">- ${{ money(summary.discount_coupon_total) }}</dd>
         </div>
         <div class="flex justify-between px-5 py-3">
           <dt class="text-gray-600">Descuentos fidelidad</dt>
-          <dd class="font-medium tabular-nums text-blue-600">- ${{ money(parsedTotals?.discount_loyalty_total) }}</dd>
+          <dd class="font-medium tabular-nums text-blue-600">- ${{ money(summary.discount_loyalty_total) }}</dd>
+        </div>
+        <div class="flex justify-between px-5 py-3">
+          <dt class="text-gray-600">Ganancia del corte</dt>
+          <dd class="font-medium tabular-nums text-emerald-700">${{ money(summary.profit_total) }}</dd>
         </div>
         <div class="flex justify-between bg-gray-50/80 px-5 py-4 border-t border-gray-200">
           <dt class="font-bold text-gray-900 text-base">Total cobrado</dt>

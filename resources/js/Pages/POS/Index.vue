@@ -11,6 +11,7 @@ import {
     saveSnapshot,
 } from '@/offline/snapshot';
 import { getPendingCounts, getUnsyncedSoldSkus, queueSale, syncAll } from '@/offline/sync';
+import { usePersistentCart } from '@/composables/usePersistentCart';
 import { openPrinterSettings, printSale, validatePrinterReadyForCheckout } from '@/services/printSale';
 import { Head, router, useForm, usePage } from '@inertiajs/vue3';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
@@ -40,6 +41,20 @@ const props = defineProps({
 });
 
 const page = usePage();
+const authenticatedUserId = Number(page.props?.auth?.user?.id ?? 0);
+const persistentCartStorageKey = `samy_pos_cart_user_${authenticatedUserId > 0 ? authenticatedUserId : 'guest'}`;
+
+const {
+    isRestoring: restoringPersistentCart,
+    loadCart,
+    saveCart,
+    clearCart: clearPersistentCart,
+    addToCart: addToPersistentCart,
+    removeFromCart: removeFromPersistentCart,
+} = usePersistentCart(persistentCartStorageKey);
+
+const hydratingPersistedState = ref(false);
+const clearStorageRequested = ref(false);
 
 // Permisos — combina props.can con shared permissions para backward-compat
 const canCreateSale = computed(
@@ -60,6 +75,8 @@ const canDiscount = computed(
 const q              = ref(props.filters.q          || '');
 const genderFilter   = ref(props.filters.gender     || '');
 const categoryFilter = ref(props.filters.category_id ? String(props.filters.category_id) : '');
+const LIVE_SEARCH_DEBOUNCE_MS = 400;
+let liveSearchTimer = null;
 
 const localProducts = ref([]);
 const localCategories = ref([]);
@@ -84,7 +101,10 @@ function applySearch() {
 watch([genderFilter, categoryFilter], () => applySearch());
 
 watch(q, () => {
-    if (isOffline.value) refreshLocalProducts();
+    clearTimeout(liveSearchTimer);
+    liveSearchTimer = setTimeout(() => {
+        applySearch();
+    }, LIVE_SEARCH_DEBOUNCE_MS);
 });
 
 const displayedProducts = computed(() => {
@@ -293,15 +313,19 @@ async function handleOnline() {
     isOffline.value = false;
     await checkSnapshotAndUpdate();
     await syncPendingNow({ silentWhenEmpty: true, silentSuccess: true });
+    revalidatePersistedCartItems();
 }
 
 async function handleOffline() {
     isOffline.value = true;
     await loadLocalInventory();
+    revalidatePersistedCartItems();
 }
 
 onMounted(async () => {
     await refreshPendingCounts();
+    restorePersistentCart();
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
@@ -311,11 +335,14 @@ onMounted(async () => {
     } else {
         await loadLocalInventory();
     }
+
+    revalidatePersistedCartItems();
 });
 
 onBeforeUnmount(() => {
     window.removeEventListener('online', handleOnline);
     window.removeEventListener('offline', handleOffline);
+    clearTimeout(liveSearchTimer);
 
     if (typeof document !== 'undefined') {
         document.body.classList.remove('overflow-hidden');
@@ -334,21 +361,24 @@ function addToCart(product, variant, qty = 1) {
 
     const safeQty = Math.max(1, Number(qty ?? 1));
     const stock = Number(variant.stock ?? 0);
-    const existing = cart.value.find((item) => item.variant.id === variant.id);
 
-    if (existing) {
-        existing.qty = Math.min(stock, existing.qty + safeQty);
-        if (existing.qty >= stock) {
-            showToast('Cantidad ajustada al stock disponible.', 'error');
-        }
-    } else {
-        cart.value.push({
-            product,
-            variant,
-            qty: Math.min(stock, safeQty),
-            discount_type: null,
-            discount_value: null,
-        });
+    const existing = cart.value.find((item) => Number(item.variant?.id) === Number(variant.id));
+
+    const result = addToPersistentCart(cart.value, {
+        product,
+        variant,
+        qty: safeQty,
+        discount_type: null,
+        discount_value: null,
+    });
+
+    if (!result.ok) {
+        showToast('No se pudo agregar la variante al carrito.', 'error');
+        return;
+    }
+
+    if (result.item?.qty >= stock && existing) {
+        showToast('Cantidad ajustada al stock disponible.', 'error');
     }
 
     uiMessage.value = `"${product.name}" agregado.`;
@@ -382,7 +412,7 @@ function onVariantConfirm({ variant, qty }) {
 }
 
 function removeFromCart(variantId) {
-    cart.value = cart.value.filter((i) => i.variant.id !== variantId);
+    cart.value = removeFromPersistentCart(cart.value, variantId);
 }
 
 function incrementQty(variantId) {
@@ -419,6 +449,8 @@ function setQty(variantId, nextQty) {
 }
 
 function clearCart() {
+    clearStorageRequested.value = true;
+    clearPersistentCart();
     cart.value = [];
     globalDiscountType.value  = null;
     globalDiscountValue.value = null;
@@ -478,6 +510,136 @@ function clearCustomer() {
     selectedCustomer.value = null;
     customerQuery.value    = '';
     customerResults.value  = [];
+}
+
+function resolveVariantFromCatalog(variantId) {
+    const targetId = Number(variantId ?? 0);
+    if (!Number.isFinite(targetId) || targetId <= 0) return null;
+
+    const catalogs = [
+        ...(Array.isArray(props.products?.data) ? props.products.data : []),
+        ...(Array.isArray(localProducts.value) ? localProducts.value : []),
+    ];
+
+    for (const product of catalogs) {
+        const variants = Array.isArray(product?.variants) ? product.variants : [];
+        const variant = variants.find((entry) => Number(entry?.id) === targetId);
+
+        if (variant) {
+            return { product, variant };
+        }
+    }
+
+    return null;
+}
+
+function restorePersistentCart() {
+    hydratingPersistedState.value = true;
+
+    try {
+        const restored = loadCart({ resolveVariantById: resolveVariantFromCatalog });
+
+        if (restored.corrupted) {
+            showToast('Se reinicio el carrito guardado por datos invalidos.', 'error');
+            return;
+        }
+
+        if (!restored.state) return;
+
+        cart.value = restored.state.cart;
+        selectedCustomer.value = restored.state.selectedCustomer;
+        customerResults.value = [];
+
+        if (selectedCustomer.value) {
+            customerQuery.value = `${selectedCustomer.value.name}${selectedCustomer.value.phone ? ` · ${selectedCustomer.value.phone}` : ''}`;
+        } else {
+            customerQuery.value = '';
+        }
+
+        globalDiscountType.value = restored.state.globalDiscountType;
+        globalDiscountValue.value = restored.state.globalDiscountValue;
+        couponCode.value = restored.state.couponCode;
+        couponApplied.value = restored.state.couponApplied;
+        previewTotals.value = restored.state.previewTotals;
+        q.value = restored.state.searchQuery ?? '';
+        previewError.value = '';
+
+        if (restored.invalidItems > 0) {
+            showToast(`Se retiraron ${restored.invalidItems} productos sin stock o invalidos.`);
+        }
+    } finally {
+        hydratingPersistedState.value = false;
+    }
+}
+
+function revalidatePersistedCartItems() {
+    if (!cart.value.length) return;
+
+    let removedItems = 0;
+    let adjustedQty = 0;
+
+    const normalized = [];
+    for (const line of cart.value) {
+        const variantId = Number(line?.variant?.id ?? 0);
+        if (!Number.isFinite(variantId) || variantId <= 0) {
+            removedItems += 1;
+            continue;
+        }
+
+        const resolved = resolveVariantFromCatalog(variantId);
+        const product = resolved?.product ?? line.product;
+        const variant = resolved?.variant ?? line.variant;
+
+        const stock = Number(variant?.stock ?? 0);
+        if (!Number.isFinite(stock) || stock <= 0) {
+            removedItems += 1;
+            continue;
+        }
+
+        const qty = Math.max(1, Math.min(stock, Number(line.qty ?? 1)));
+        if (qty !== Number(line.qty ?? 1)) {
+            adjustedQty += 1;
+        }
+
+        normalized.push({
+            ...line,
+            product,
+            variant,
+            qty,
+        });
+    }
+
+    if (removedItems > 0 || adjustedQty > 0) {
+        cart.value = normalized;
+
+        if (removedItems > 0) {
+            showToast(`Se retiraron ${removedItems} productos sin stock disponible.`);
+        }
+
+        if (adjustedQty > 0) {
+            showToast('Algunas cantidades se ajustaron al stock actual.');
+        }
+    }
+}
+
+function persistCartState() {
+    if (hydratingPersistedState.value || restoringPersistentCart.value) return;
+
+    if (clearStorageRequested.value) {
+        clearStorageRequested.value = false;
+        return;
+    }
+
+    saveCart({
+        cart: cart.value,
+        selectedCustomer: selectedCustomer.value,
+        globalDiscountType: globalDiscountType.value,
+        globalDiscountValue: globalDiscountValue.value,
+        couponCode: couponCode.value,
+        couponApplied: couponApplied.value,
+        searchQuery: q.value,
+        previewTotals: previewTotals.value,
+    });
 }
 
 const csrfToken = computed(() =>
@@ -607,7 +769,20 @@ watch(
         selectedCustomer.value?.id ?? null,
         cart.value.map((i) => [i.variant.id, i.qty, i.discount_type, i.discount_value]),
     ],
-    () => { previewTotals.value = null; couponApplied.value = false; previewError.value = ''; },
+    () => {
+        if (hydratingPersistedState.value || restoringPersistentCart.value) return;
+        previewTotals.value = null;
+        couponApplied.value = false;
+        previewError.value = '';
+    },
+    { deep: true },
+);
+
+watch(
+    [cart, selectedCustomer, globalDiscountType, globalDiscountValue, couponCode, couponApplied, previewTotals, q],
+    () => {
+        persistCartState();
+    },
     { deep: true },
 );
 

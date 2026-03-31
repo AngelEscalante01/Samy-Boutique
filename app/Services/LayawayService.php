@@ -29,6 +29,7 @@ class LayawayService
         return DB::transaction(function () use ($payload, $user) {
             $customerId = Arr::get($payload, 'customer_id');
             $customerId = $customerId !== null ? (int) $customerId : null;
+            $vigenciaDias = max(1, (int) Arr::get($payload, 'vigencia_dias', 0));
 
             $itemsPayload = Arr::get($payload, 'items', []);
             $variantIds = collect($itemsPayload)
@@ -88,6 +89,8 @@ class LayawayService
                 'status' => 'open',
                 'subtotal' => $subtotal,
                 'paid_total' => '0.00',
+                'vigencia_dias' => $vigenciaDias,
+                'fecha_vencimiento' => now()->startOfDay()->addDays($vigenciaDias)->toDateString(),
             ]);
 
             foreach ($itemsPayload as $item) {
@@ -119,16 +122,41 @@ class LayawayService
             // Pago inicial opcional
             $paymentsPayload = Arr::get($payload, 'payments', []);
             foreach ($paymentsPayload as $payment) {
-                $this->addPaymentInternal($layaway, $payment);
+                $this->addPaymentInternal($layaway, array_merge($payment, [
+                    'created_by' => (int) $user->id,
+                ]));
             }
 
             return $layaway->fresh(['items.product', 'items.variant.size', 'items.variant.color', 'payments', 'customer', 'creator']);
         });
     }
 
-    public function addPayment(Layaway $layaway, array $payload): LayawayPayment
+    public function updateVigencia(Layaway $layaway, int $vigenciaDias): Layaway
     {
-        return DB::transaction(function () use ($layaway, $payload) {
+        return DB::transaction(function () use ($layaway, $vigenciaDias) {
+            /** @var Layaway $locked */
+            $locked = Layaway::query()->lockForUpdate()->findOrFail($layaway->id);
+
+            if ($locked->status !== 'open') {
+                throw ValidationException::withMessages([
+                    'layaway' => ['La vigencia solo se puede modificar en apartados abiertos.'],
+                ]);
+            }
+
+            $baseDate = $locked->created_at?->copy()->startOfDay() ?? now()->startOfDay();
+
+            $locked->update([
+                'vigencia_dias' => $vigenciaDias,
+                'fecha_vencimiento' => $baseDate->addDays($vigenciaDias)->toDateString(),
+            ]);
+
+            return $locked->fresh(['items.product', 'items.variant.size', 'items.variant.color', 'payments', 'customer', 'creator', 'sale']);
+        });
+    }
+
+    public function addPayment(Layaway $layaway, array $payload, ?User $user = null): LayawayPayment
+    {
+        return DB::transaction(function () use ($layaway, $payload, $user) {
             /** @var Layaway $locked */
             $locked = Layaway::query()->lockForUpdate()->findOrFail($layaway->id);
 
@@ -138,7 +166,9 @@ class LayawayService
                 ]);
             }
 
-            $payment = $this->addPaymentInternal($locked, $payload);
+            $payment = $this->addPaymentInternal($locked, array_merge($payload, [
+                'created_by' => $user?->id,
+            ]));
 
             return $payment;
         });
@@ -407,6 +437,7 @@ class LayawayService
 
         $payment = LayawayPayment::create([
             'layaway_id' => $layaway->id,
+            'created_by' => isset($payload['created_by']) ? (int) $payload['created_by'] : null,
             'method' => $method,
             'amount' => number_format($amount, 2, '.', ''),
             'reference' => $payload['reference'] ?? null,

@@ -23,7 +23,7 @@ const csrfToken = computed(() => {
 
 const date = ref(props.filters.date || new Date().toISOString().slice(0, 10));
 
-const totals = ref(null);
+const totals = ref(props.savedCut?.totals_json || null);
 const loading = ref(false);
 const previewError = ref('');
 
@@ -81,8 +81,22 @@ function save() {
     });
 }
 
-const payments = computed(() => totals.value?.payments_by_method || null);
-const cancelledSales = computed(() => totals.value?.cancelled_sales || []);
+const summary = computed(() => ({
+    sales_count: Number(totals.value?.sales_count ?? 0),
+    canceled_count: Number(totals.value?.canceled_count ?? totals.value?.cancelled_count ?? 0),
+    subtotal_sum: Number(totals.value?.subtotal_sum ?? 0),
+    manual_discount_total: Number(totals.value?.manual_discount_total ?? totals.value?.discount_manual_total ?? totals.value?.discount_sum ?? 0),
+    coupon_discount_total: Number(totals.value?.coupon_discount_total ?? totals.value?.discount_coupon_total ?? totals.value?.coupon_discount_sum ?? 0),
+    loyalty_discount_total: Number(totals.value?.loyalty_discount_total ?? totals.value?.discount_loyalty_total ?? totals.value?.loyalty_discount_sum ?? 0),
+    total_sales: Number(totals.value?.total_sales ?? totals.value?.total_sold ?? totals.value?.total_sum ?? 0),
+    profit_total: Number(totals.value?.profit_total ?? totals.value?.profit_sum ?? 0),
+    top_products: totals.value?.top_products ?? [],
+    top_categories: totals.value?.top_categories ?? [],
+    cancelled_sales: totals.value?.cancelled_sales ?? [],
+}));
+
+const payments = computed(() => totals.value?.payments_by_method || totals.value?.payments || null);
+const cancelledSales = computed(() => summary.value.cancelled_sales);
 </script>
 
 <template>
@@ -166,27 +180,35 @@ const cancelledSales = computed(() => totals.value?.cancelled_sales || []);
                         <div class="mt-4 space-y-2 text-sm">
                             <div class="flex items-center justify-between">
                                 <span class="text-gray-500">Número de ventas</span>
-                                <span class="font-medium text-gray-900">{{ totals.sales_count }}</span>
+                                <span class="font-medium text-gray-900">{{ summary.sales_count }}</span>
                             </div>
                             <div class="flex items-center justify-between">
                                 <span class="text-gray-500">Subtotal</span>
-                                <span class="font-medium text-gray-900">{{ money(totals.subtotal_sum) }}</span>
+                                <span class="font-medium text-gray-900">{{ money(summary.subtotal_sum) }}</span>
                             </div>
                             <div class="flex items-center justify-between">
                                 <span class="text-gray-500">Descuentos</span>
-                                <span class="font-medium text-gray-900">-{{ money(totals.discount_sum) }}</span>
+                                <span class="font-medium text-gray-900">-{{ money(summary.manual_discount_total) }}</span>
                             </div>
                             <div class="flex items-center justify-between">
                                 <span class="text-gray-500">Cupones</span>
-                                <span class="font-medium text-gray-900">-{{ money(totals.coupon_discount_sum) }}</span>
+                                <span class="font-medium text-gray-900">-{{ money(summary.coupon_discount_total) }}</span>
                             </div>
                             <div class="flex items-center justify-between">
                                 <span class="text-gray-500">Fidelidad</span>
-                                <span class="font-medium text-gray-900">-{{ money(totals.loyalty_discount_sum) }}</span>
+                                <span class="font-medium text-gray-900">-{{ money(summary.loyalty_discount_total) }}</span>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="text-gray-500">Ventas canceladas</span>
+                                <span class="font-medium text-gray-900">{{ summary.canceled_count }}</span>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <span class="font-semibold text-gray-900">Ganancia</span>
+                                <span class="font-semibold text-emerald-700">{{ money(summary.profit_total) }}</span>
                             </div>
                             <div class="flex items-center justify-between pt-2 text-base">
                                 <span class="font-semibold text-gray-900">Total ventas</span>
-                                <span class="font-semibold text-gray-900">{{ money(totals.total_sum) }}</span>
+                                <span class="font-semibold text-gray-900">{{ money(summary.total_sales) }}</span>
                             </div>
                         </div>
                     </div>
@@ -205,13 +227,13 @@ const cancelledSales = computed(() => totals.value?.cancelled_sales || []);
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-200 bg-white">
-                                    <tr v-for="p in totals.top_products" :key="p.product_id">
+                                    <tr v-for="p in summary.top_products" :key="p.product_id">
                                         <td class="px-4 py-3 text-sm text-gray-700">{{ p.sku }}</td>
                                         <td class="px-4 py-3 text-sm text-gray-700">{{ p.name }}</td>
                                         <td class="px-4 py-3 text-right text-sm text-gray-700">{{ p.qty }}</td>
                                         <td class="px-4 py-3 text-right text-sm text-gray-700">{{ money(p.total) }}</td>
                                     </tr>
-                                    <tr v-if="!totals.top_products?.length">
+                                    <tr v-if="!summary.top_products?.length">
                                         <td class="px-4 py-6 text-center text-sm text-gray-500" colspan="4">Sin datos.</td>
                                     </tr>
                                 </tbody>
@@ -271,14 +293,14 @@ const cancelledSales = computed(() => totals.value?.cancelled_sales || []);
                             <h3 class="text-lg font-semibold text-gray-900">Top categorías (opcional)</h3>
                             <div class="mt-3 space-y-2 text-sm">
                                 <div
-                                    v-for="c in totals.top_categories"
+                                    v-for="c in summary.top_categories"
                                     :key="c.category_id ?? c.name"
                                     class="flex items-center justify-between"
                                 >
                                     <span class="text-gray-700">{{ c.name }}</span>
                                     <span class="font-medium text-gray-900">{{ money(c.total) }}</span>
                                 </div>
-                                <div v-if="!totals.top_categories?.length" class="text-sm text-gray-500">
+                                <div v-if="!summary.top_categories?.length" class="text-sm text-gray-500">
                                     Sin datos.
                                 </div>
                             </div>

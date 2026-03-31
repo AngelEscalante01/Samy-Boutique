@@ -59,13 +59,49 @@ function clearCustomer() { selectedCustomer.value = null; customerQuery.value = 
 
 const initialPaymentAmount = ref('')
 const initialPaymentMethod = ref('cash')
+const vigenciaOpciones = [7, 15, 30, 45, 60]
+const vigenciaSeleccion = ref('30')
+const vigenciaManual = ref('')
 
-const form = useForm({ customer_id: null, items: [], payments: [] })
+const vigenciaDias = computed(() => {
+  if (vigenciaSeleccion.value === 'manual') {
+    return Number(vigenciaManual.value || 0)
+  }
+
+  return Number(vigenciaSeleccion.value || 0)
+})
+
+const fechaApartadoPreview = computed(() => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return today
+})
+
+const fechaVencimientoPreview = computed(() => {
+  const dias = vigenciaDias.value
+  if (!Number.isInteger(dias) || dias <= 0) return null
+
+  const due = new Date()
+  due.setHours(0, 0, 0, 0)
+  due.setDate(due.getDate() + dias)
+  return due
+})
+
+const form = useForm({ customer_id: null, vigencia_dias: null, items: [], payments: [] })
 
 function submit() {
   statusMessage.value = null
 
+  if (!Number.isInteger(vigenciaDias.value) || vigenciaDias.value <= 0) {
+    statusMessage.value = {
+      type: 'error',
+      text: 'La vigencia debe ser un numero entero mayor a 0 dias.',
+    }
+    return
+  }
+
   form.customer_id = selectedCustomer.value?.id ?? null
+  form.vigencia_dias = vigenciaDias.value
   form.items = cart.value.map(item => ({ variant_id: item.variant.id, qty: Number(item.qty || 1) }))
   const amt = parseFloat(initialPaymentAmount.value)
   form.payments = (!isNaN(amt) && amt > 0) ? [{ method: initialPaymentMethod.value, amount: amt }] : []
@@ -108,6 +144,10 @@ function submit() {
 }
 
 function money(v) { return Number(v).toFixed(2) }
+function fmtDateShort(d) {
+  if (!d) return '—'
+  return d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
+}
 
 function storageBaseUrl() {
   if (typeof window === 'undefined') return '/storage/'
@@ -225,6 +265,29 @@ function variantLabel(variant) {
             </button>
           </div>
           <p class="text-xs text-gray-400">Opcional</p>
+        </div>
+
+        <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 space-y-3">
+          <h2 class="text-sm font-semibold text-gray-700">Vigencia (dias)</h2>
+          <select v-model="vigenciaSeleccion"
+            class="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400">
+            <option v-for="dias in vigenciaOpciones" :key="dias" :value="String(dias)">{{ dias }} dias</option>
+            <option value="manual">Otro (captura manual)</option>
+          </select>
+
+          <div v-if="vigenciaSeleccion === 'manual'">
+            <label class="mb-1 block text-xs font-medium text-gray-600">Dias de vigencia</label>
+            <input v-model="vigenciaManual" type="number" min="1" step="1" placeholder="Ej. 21"
+              class="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400" />
+          </div>
+
+          <p v-if="form.errors.vigencia_dias" class="text-xs text-red-600">{{ form.errors.vigencia_dias }}</p>
+
+          <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <p>Fecha del apartado: <strong>{{ fmtDateShort(fechaApartadoPreview) }}</strong></p>
+            <p>Vigencia: <strong>{{ Number.isInteger(vigenciaDias) && vigenciaDias > 0 ? vigenciaDias + ' dias' : 'Invalida' }}</strong></p>
+            <p>Vence el: <strong>{{ fechaVencimientoPreview ? fmtDateShort(fechaVencimientoPreview) : 'Fecha invalida' }}</strong></p>
+          </div>
         </div>
 
         <!-- Cart -->

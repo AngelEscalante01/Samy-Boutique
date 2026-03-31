@@ -1,386 +1,351 @@
 <script setup>
-import { ref, computed } from 'vue'
-import { Head, Link, router, usePage, useForm } from '@inertiajs/vue3'
-import SummaryCards    from '@/Components/CashCuts/SummaryCards.vue'
-import PaymentBreakdown from '@/Components/CashCuts/PaymentBreakdown.vue'
+import { computed, ref } from 'vue'
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3'
 
 const props = defineProps({
   selectedDate: { type: String, required: true },
-  summary:      { type: Object,  default: null  },
-  sales:        { type: Array,   default: () => [] },
-  savedCuts:    { type: Array,   default: () => [] },
+  summary: { type: Object, default: null },
+  sales: { type: Array, default: () => [] },
+  savedCuts: { type: Array, default: () => [] },
 })
 
 const flash = computed(() => usePage().props.flash ?? {})
 
-// ── Estado local ─────────────────────────────────────────────────────────────
-const localDate    = ref(props.selectedDate)
+const localDate = ref(props.selectedDate)
 const localSummary = ref(props.summary)
-const localSales   = ref(props.sales)
-const generating   = ref(false)
-const salesOpen    = ref(true)
+const localSales = ref(props.sales)
+const generating = ref(false)
+const previewError = ref('')
 
-// ── Generar resumen (AJAX) ────────────────────────────────────────────────────
+const saveForm = useForm({
+  date: props.selectedDate,
+})
+
+const cards = computed(() => {
+  if (!localSummary.value) return []
+
+  return [
+    {
+      key: 'total_sales',
+      label: 'Total vendido',
+      value: money(localSummary.value.total_sold),
+      tone: 'text-emerald-700 bg-emerald-50 ring-emerald-100',
+      sub: `${Number(localSummary.value.sales_count ?? 0).toLocaleString('es-MX')} ventas`,
+    },
+    {
+      key: 'profit_total',
+      label: 'Ganancia',
+      value: money(localSummary.value.profit_total),
+      tone: 'text-emerald-700 bg-emerald-100 ring-emerald-200',
+      sub: 'Ganancia real del dia',
+      highlight: true,
+    },
+    {
+      key: 'sales_count',
+      label: 'Ventas realizadas',
+      value: Number(localSummary.value.sales_count ?? 0).toLocaleString('es-MX'),
+      tone: 'text-sky-700 bg-sky-50 ring-sky-100',
+      sub: 'Operaciones completadas',
+    },
+    {
+      key: 'canceled_count',
+      label: 'Canceladas',
+      value: Number(localSummary.value.canceled_count ?? 0).toLocaleString('es-MX'),
+      tone: 'text-rose-700 bg-rose-50 ring-rose-100',
+      sub: 'No cuentan en total ni ganancia',
+    },
+    {
+      key: 'manual_discount_total',
+      label: 'Desc. manuales',
+      value: money(localSummary.value.manual_discount_total),
+      tone: 'text-amber-700 bg-amber-50 ring-amber-100',
+      sub: 'Ajustes manuales',
+    },
+    {
+      key: 'coupon_discount_total',
+      label: 'Desc. cupones',
+      value: money(localSummary.value.coupon_discount_total),
+      tone: 'text-violet-700 bg-violet-50 ring-violet-100',
+      sub: 'Promociones aplicadas',
+    },
+    {
+      key: 'loyalty_discount_total',
+      label: 'Desc. fidelidad',
+      value: money(localSummary.value.loyalty_discount_total),
+      tone: 'text-indigo-700 bg-indigo-50 ring-indigo-100',
+      sub: 'Beneficios lealtad',
+    },
+  ]
+})
+
+const payments = computed(() => {
+  const base = localSummary.value?.payments ?? {}
+
+  return {
+    cash: Number(base.cash ?? 0),
+    card: Number(base.card ?? 0),
+    transfer: Number(base.transfer ?? 0),
+    other: Number(base.other ?? 0),
+  }
+})
+
+const paymentRows = computed(() => [
+  { key: 'cash', label: 'Efectivo', className: 'bg-emerald-100 text-emerald-700 ring-emerald-200' },
+  { key: 'card', label: 'Tarjeta', className: 'bg-sky-100 text-sky-700 ring-sky-200' },
+  { key: 'transfer', label: 'Transferencia', className: 'bg-indigo-100 text-indigo-700 ring-indigo-200' },
+  { key: 'other', label: 'Otro', className: 'bg-slate-100 text-slate-600 ring-slate-200' },
+])
+
 async function generate() {
+  previewError.value = ''
   generating.value = true
+
   try {
-    const res = await fetch(route('cashcuts.preview'), {
-      method:  'POST',
+    const response = await window.fetch(route('cashcuts.preview'), {
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-CSRF-TOKEN': document.head.querySelector('meta[name="csrf-token"]')?.content ?? '',
-        'Accept':       'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        'X-CSRF-TOKEN': document?.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ?? '',
+        Accept: 'application/json',
       },
       body: JSON.stringify({ date: localDate.value }),
     })
-    if (!res.ok) throw new Error('Error al generar')
-    const json = await res.json()
-    localSummary.value = json.summary
-    localSales.value   = json.sales
-  } catch (e) {
-    alert('No se pudo generar el resumen. Intenta de nuevo.')
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      previewError.value = data?.errors?.date?.[0] || data?.message || 'No se pudo generar el corte.'
+      return
+    }
+
+    localSummary.value = data.summary
+    localSales.value = data.sales
+  } catch (error) {
+    previewError.value = 'Error de red al generar el corte.'
   } finally {
     generating.value = false
   }
 }
 
-// ── Guardar corte ─────────────────────────────────────────────────────────────
-const saveForm = useForm({ date: props.selectedDate })
-
-function savecut() {
+function saveCut() {
   saveForm.date = localDate.value
-  saveForm.post(route('cashcuts.store'), { preserveScroll: true })
+  saveForm.post(route('cashcuts.store'), {
+    preserveScroll: true,
+  })
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function money(v) {
-  return Number(v ?? 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+function money(value) {
+  return new Intl.NumberFormat('es-MX', {
+    style: 'currency',
+    currency: 'MXN',
+    maximumFractionDigits: 2,
+  }).format(Number(value ?? 0))
 }
 
-function fmtDate(iso) {
-  if (!iso) return '—'
-  return new Date(iso).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
+function fmtDate(value) {
+  if (!value) return '—'
+
+  return new Date(value).toLocaleDateString('es-MX', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
 }
 
-function fmtTime(iso) {
-  if (!iso) return ''
-  return new Date(iso).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
-}
+function fmtDateTime(value) {
+  if (!value) return '—'
 
-function methodLabel(methods) {
-  if (!methods || methods.length === 0) return '—'
-  if (methods.length > 1) return 'Mixto'
-  const map = { cash: 'Efectivo', card: 'Tarjeta', transfer: 'Transferencia', other: 'Otro' }
-  return map[methods[0]] ?? methods[0]
-}
-
-function methodColor(methods) {
-  if (!methods || methods.length === 0) return 'bg-gray-100 text-gray-500'
-  if (methods.length > 1) return 'bg-slate-100 text-slate-600'
-  const map = {
-    cash:     'bg-emerald-50 text-emerald-700 ring-emerald-200',
-    card:     'bg-blue-50    text-blue-700    ring-blue-200',
-    transfer: 'bg-violet-50  text-violet-700  ring-violet-200',
-    other:    'bg-gray-50    text-gray-600    ring-gray-200',
-  }
-  return (map[methods[0]] ?? 'bg-gray-100 text-gray-500') + ' ring-1'
-}
-
-function statusColor(status) {
-  return status === 'completed'
-    ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-    : 'bg-red-50    text-red-600    ring-1 ring-red-200'
+  return new Date(value).toLocaleString('es-MX', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 </script>
 
 <template>
   <Head title="Corte diario" />
 
-  <div class="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8 space-y-6">
-
-    <!-- ── Breadcrumb ──────────────────────────────────────────────────────── -->
-    <nav class="flex items-center gap-2 text-sm text-gray-500">
-      <Link :href="route('dashboard')" class="hover:text-gray-700 transition-colors">Inicio</Link>
-      <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-      </svg>
-      <span class="font-medium text-gray-700">Corte diario</span>
-    </nav>
-
-    <!-- ── Encabezado ─────────────────────────────────────────────────────── -->
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+  <div class="mx-auto max-w-7xl space-y-4 px-4 py-4 sm:px-6 lg:px-8">
+    <section class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-[0_10px_30px_-24px_rgba(15,23,42,1)]">
       <div>
-        <h1 class="text-2xl font-bold text-gray-900">Corte diario</h1>
-        <p class="mt-1 text-sm text-gray-500">Resumen de ventas por día</p>
+        <h1 class="text-2xl font-bold tracking-tight text-slate-900">Corte diario</h1>
+        <p class="mt-0.5 text-sm text-slate-500">Resumen de ventas y ganancias por dia</p>
       </div>
 
-      <!-- Selector de fecha + acciones -->
       <div class="flex flex-wrap items-center gap-2">
         <input
           v-model="localDate"
           type="date"
-          class="rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500
-                 focus:ring-1 focus:ring-blue-500 focus:outline-none"
-        />
+          class="h-9 rounded-lg border border-slate-200 px-2.5 text-sm text-slate-700 focus:border-slate-400 focus:outline-none focus:ring-1 focus:ring-slate-400"
+        >
+
         <button
           type="button"
+          class="inline-flex h-9 items-center rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           :disabled="generating"
-          class="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold
-                 text-white shadow-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed
-                 transition-colors"
           @click="generate"
         >
-          <svg v-if="generating" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-          </svg>
-          <svg v-else class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12c0-3.866-3.134-7-7-7S5.5 8.134 5.5 12s3.134 7 7 7"/>
-            <path stroke-linecap="round" stroke-linejoin="round" d="m16.5 9 3 3-3 3"/>
-          </svg>
-          {{ generating ? 'Generando…' : 'Generar' }}
+          {{ generating ? 'Generando...' : 'Generar' }}
         </button>
 
         <button
           type="button"
+          class="inline-flex h-9 items-center rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
           :disabled="!localSummary || saveForm.processing"
-          class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold
-                 text-white shadow-sm hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed
-                 transition-colors"
-          @click="savecut"
+          @click="saveCut"
         >
-          <svg v-if="saveForm.processing" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-          </svg>
-          <svg v-else class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
-          </svg>
-          {{ saveForm.processing ? 'Guardando…' : 'Guardar corte' }}
+          {{ saveForm.processing ? 'Guardando...' : 'Guardar corte' }}
         </button>
       </div>
-    </div>
+    </section>
 
-    <!-- ── Flash ──────────────────────────────────────────────────────────── -->
-    <Transition
-      enter-active-class="transition duration-300 ease-out"
-      enter-from-class="opacity-0 -translate-y-2"
-      enter-to-class="opacity-100 translate-y-0"
-      leave-active-class="transition duration-200 ease-in"
-      leave-from-class="opacity-100 translate-y-0"
-      leave-to-class="opacity-0"
+    <section v-if="flash.success" class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">
+      {{ flash.success }}
+    </section>
+    <section v-if="previewError" class="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800">
+      {{ previewError }}
+    </section>
+
+    <section
+      v-if="!localSummary"
+      class="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-16 text-center"
     >
-      <div v-if="flash.success"
-           class="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-        <svg class="h-4 w-4 flex-shrink-0 mt-0.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+      <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-white text-slate-400 ring-1 ring-slate-200">
+        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3.375 19.5h17.25M6 7.5h12M6 12h12M6 16.5h8.25" />
         </svg>
-        {{ flash.success }}
       </div>
-    </Transition>
+      <div>
+        <p class="text-sm font-semibold text-slate-700">Aun no hay corte generado</p>
+        <p class="mt-0.5 text-xs text-slate-500">Selecciona una fecha y presiona Generar para calcular ventas, descuentos y ganancias.</p>
+      </div>
+    </section>
 
-    <!-- ── Estado vacío ───────────────────────────────────────────────────── -->
-    <div v-if="!localSummary"
-         class="flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed
-                border-gray-200 bg-gray-50/50 py-16 text-center">
-      <svg class="h-12 w-12 text-gray-200" fill="none" viewBox="0 0 24 24" stroke-width="1" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round"
-              d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504
-                 1.125-1.125m-8.625 0V5.625m0 0A1.125 1.125 0 0 1 4.5 4.5h6.75a1.125 1.125 0 0 1 1.125
-                 1.125v2.25m-8.625-2.25H5.625m5.625 0h6.75a1.125 1.125 0 0 1 1.125 1.125v9.75M12 12.75h.008v.008H12v-.008Z"/>
-      </svg>
-      <p class="text-sm text-gray-500">Selecciona una fecha y presiona <strong>Generar</strong> para ver el resumen.</p>
-    </div>
-
-    <!-- ── Contenido generado ──────────────────────────────────────────────── -->
-    <template v-if="localSummary">
-
-      <!-- Fecha del corte -->
-      <p class="text-sm font-medium text-gray-600">
-        Mostrando resultados para:
-        <span class="font-bold text-gray-900">{{ fmtDate(localSummary.date + 'T00:00:00') }}</span>
-      </p>
-
-      <!-- Cards de métricas -->
-      <SummaryCards :summary="localSummary" />
-
-      <!-- Desglose por método -->
-      <PaymentBreakdown :payments="localSummary.payments" />
-
-      <!-- ── Ventas del día ────────────────────────────────────────────────── -->
-      <div class="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-200">
-        <button
-          type="button"
-          class="flex w-full items-center justify-between px-5 py-3 border-b border-gray-100
-                 bg-gray-50/50 hover:bg-gray-100/60 transition-colors text-left"
-          @click="salesOpen = !salesOpen"
+    <template v-else>
+      <section class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <article
+          v-for="card in cards"
+          :key="card.key"
+          class="rounded-xl border border-slate-200 bg-white px-3.5 py-3 ring-1"
+          :class="[card.tone, card.highlight ? 'xl:col-span-2' : '']"
         >
-          <h3 class="text-sm font-semibold text-gray-700">
-            Ventas del día
-            <span class="ml-2 rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
-              {{ localSales.length }}
-            </span>
-          </h3>
-          <svg
-            :class="salesOpen ? 'rotate-180' : ''"
-            class="h-4 w-4 text-gray-400 transition-transform"
-            fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-          </svg>
-        </button>
+          <p class="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{{ card.label }}</p>
+          <p class="mt-1.5 text-xl font-bold tracking-tight">{{ card.value }}</p>
+          <p class="mt-1 text-xs text-slate-500">{{ card.sub }}</p>
+        </article>
+      </section>
 
-        <div v-show="salesOpen">
-          <!-- Tabla desktop -->
-          <div class="hidden sm:block overflow-x-auto">
-            <table class="min-w-full divide-y divide-gray-50 text-sm">
-              <thead>
-                <tr class="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                  <th class="px-5 py-3 text-left w-16">Folio</th>
-                  <th class="px-5 py-3 text-left">Hora</th>
-                  <th class="px-5 py-3 text-left">Cliente</th>
-                  <th class="px-5 py-3 text-left w-28">Estado</th>
-                  <th class="px-5 py-3 text-left">Método</th>
-                  <th class="px-5 py-3 text-right">Total</th>
-                  <th class="px-5 py-3 w-16"></th>
+      <section class="grid grid-cols-1 gap-3 xl:grid-cols-3">
+        <article class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_10px_30px_-24px_rgba(15,23,42,1)] xl:col-span-2">
+          <div class="border-b border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm font-semibold text-slate-700">Ventas del dia</div>
+          <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-slate-200">
+              <thead class="bg-slate-50/60">
+                <tr>
+                  <th class="py-2.5 pl-4 pr-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Folio</th>
+                  <th class="px-2 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Estado</th>
+                  <th class="px-2 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Total</th>
+                  <th class="px-2 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Ganancia</th>
+                  <th class="px-2 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Fecha</th>
+                  <th class="py-2.5 pl-2 pr-4 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Acciones</th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-gray-50 bg-white">
-                <tr v-if="!localSales.length">
-                  <td colspan="7" class="px-5 py-6 text-center text-sm text-gray-400">Sin ventas en esta fecha.</td>
+              <tbody class="divide-y divide-slate-100">
+                <tr v-if="localSales.length === 0">
+                  <td colspan="6" class="px-4 py-10 text-center text-sm text-slate-400">Sin ventas para la fecha seleccionada.</td>
                 </tr>
-                <tr v-for="sale in localSales" :key="sale.id" class="hover:bg-gray-50/60 transition-colors">
-                  <td class="px-5 py-3 font-mono text-gray-500">#{{ sale.id }}</td>
-                  <td class="px-5 py-3 text-gray-600 tabular-nums">{{ fmtTime(sale.created_at) }}</td>
-                  <td class="px-5 py-3 text-gray-700">{{ sale.customer ?? '—' }}</td>
-                  <td class="px-5 py-3">
-                    <span :class="statusColor(sale.status)"
-                          class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium">
+                <tr v-for="sale in localSales" :key="sale.id" class="transition-colors duration-150 hover:bg-slate-50/80">
+                  <td class="py-2.5 pl-4 pr-2 text-sm font-mono text-slate-700">#{{ sale.id }}</td>
+                  <td class="px-2 py-2.5">
+                    <span
+                      class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ring-1"
+                      :class="sale.status === 'completed'
+                        ? 'bg-emerald-100 text-emerald-700 ring-emerald-200'
+                        : 'bg-rose-100 text-rose-700 ring-rose-200'"
+                    >
                       {{ sale.status === 'completed' ? 'Pagada' : 'Cancelada' }}
                     </span>
                   </td>
-                  <td class="px-5 py-3">
-                    <span :class="methodColor(sale.methods)"
-                          class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium">
-                      {{ methodLabel(sale.methods) }}
-                    </span>
+                  <td class="px-2 py-2.5 text-right text-sm font-semibold text-slate-800">{{ money(sale.total) }}</td>
+                  <td class="px-2 py-2.5 text-right text-sm font-semibold" :class="sale.status === 'completed' ? 'text-sky-700' : 'text-slate-400'">
+                    {{ sale.status === 'completed' ? money(sale.profit) : '—' }}
                   </td>
-                  <td class="px-5 py-3 text-right font-semibold tabular-nums text-gray-900">
-                    ${{ money(sale.total) }}
-                  </td>
-                  <td class="px-5 py-3 text-center">
+                  <td class="px-2 py-2.5 text-sm text-slate-500">{{ fmtDateTime(sale.created_at) }}</td>
+                  <td class="py-2.5 pl-2 pr-4 text-right">
                     <Link
                       :href="route('sales.show', sale.id)"
-                      class="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600
-                             hover:bg-gray-100 transition-colors"
-                    >Ver</Link>
+                      class="inline-flex h-7 items-center rounded-md border border-slate-200 px-2 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-50"
+                    >
+                      Ver
+                    </Link>
                   </td>
                 </tr>
               </tbody>
             </table>
           </div>
+        </article>
 
-          <!-- Lista móvil -->
-          <ul class="sm:hidden divide-y divide-gray-100">
-            <li v-if="!localSales.length" class="px-4 py-6 text-center text-sm text-gray-400">Sin ventas.</li>
-            <li v-for="sale in localSales" :key="sale.id" class="px-4 py-3">
-              <div class="flex items-center justify-between gap-2">
-                <div class="min-w-0">
-                  <div class="flex items-center gap-2 flex-wrap">
-                    <span class="font-mono text-xs text-gray-400">#{{ sale.id }}</span>
-                    <span :class="statusColor(sale.status)"
-                          class="rounded-full px-2 py-0.5 text-xs font-medium">
-                      {{ sale.status === 'completed' ? 'Pagada' : 'Cancelada' }}
-                    </span>
-                    <span :class="methodColor(sale.methods)"
-                          class="rounded-full px-2 py-0.5 text-xs font-medium">
-                      {{ methodLabel(sale.methods) }}
-                    </span>
-                  </div>
-                  <p class="mt-0.5 text-xs text-gray-500">
-                    {{ fmtTime(sale.created_at) }}
-                    <template v-if="sale.customer"> · {{ sale.customer }}</template>
-                  </p>
-                </div>
-                <div class="flex items-center gap-2 flex-shrink-0">
-                  <span class="font-bold text-gray-900">${{ money(sale.total) }}</span>
-                  <Link :href="route('sales.show', sale.id)"
-                        class="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600
-                               hover:bg-gray-100">Ver</Link>
-                </div>
-              </div>
+        <article class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_10px_30px_-24px_rgba(15,23,42,1)]">
+          <div class="border-b border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm font-semibold text-slate-700">Metodos de pago</div>
+          <ul class="divide-y divide-slate-100">
+            <li v-for="row in paymentRows" :key="row.key" class="flex items-center justify-between px-4 py-2.5">
+              <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ring-1" :class="row.className">
+                {{ row.label }}
+              </span>
+              <span class="text-sm font-semibold text-slate-800">{{ money(payments[row.key]) }}</span>
+            </li>
+            <li class="flex items-center justify-between border-t border-slate-200 bg-slate-50/70 px-4 py-2.5">
+              <span class="text-xs font-semibold uppercase tracking-wide text-slate-500">Total</span>
+              <span class="text-sm font-bold text-slate-900">
+                {{ money(payments.cash + payments.card + payments.transfer + payments.other) }}
+              </span>
             </li>
           </ul>
-        </div>
-      </div>
+        </article>
+      </section>
     </template>
 
-    <!-- ════════════════════════════════════════════════════════════════════════
-         Historial de cortes guardados
-    ═══════════════════════════════════════════════════════════════════════════ -->
-    <div class="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-200">
-      <div class="px-5 py-3 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
-        <h3 class="text-sm font-semibold text-gray-700">Historial de cortes guardados</h3>
-        <span class="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-500">
-          {{ savedCuts.length }}
-        </span>
-      </div>
-
-      <!-- Vacío -->
-      <div v-if="!savedCuts.length" class="px-5 py-8 text-center text-sm text-gray-400">
-        Aún no hay cortes guardados.
-      </div>
-
-      <!-- Tabla desktop -->
-      <div v-else class="hidden sm:block overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-50 text-sm">
-          <thead>
-            <tr class="bg-gray-50 text-xs font-semibold uppercase tracking-wide text-gray-500">
-              <th class="px-5 py-3 text-left">Fecha</th>
-              <th class="px-5 py-3 text-right">Total ventas</th>
-              <th class="px-5 py-3 text-left">Creado por</th>
-              <th class="px-5 py-3 text-left">Guardado</th>
-              <th class="px-5 py-3 w-16"></th>
+    <section class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_10px_30px_-24px_rgba(15,23,42,1)]">
+      <div class="border-b border-slate-200 bg-slate-50/80 px-4 py-2.5 text-sm font-semibold text-slate-700">Historial de cortes guardados</div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-slate-200">
+          <thead class="bg-slate-50/60">
+            <tr>
+              <th class="py-2.5 pl-4 pr-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Fecha</th>
+              <th class="px-2 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Total ventas</th>
+              <th class="px-2 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Ganancia</th>
+              <th class="px-2 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Creado por</th>
+              <th class="px-2 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">Guardado</th>
+              <th class="py-2.5 pl-2 pr-4 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Acciones</th>
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-50 bg-white">
-            <tr v-for="cut in savedCuts" :key="cut.id" class="hover:bg-gray-50/60 transition-colors">
-              <td class="px-5 py-3 font-medium text-gray-800">{{ fmtDate(cut.cut_date + 'T00:00:00') }}</td>
-              <td class="px-5 py-3 text-right font-semibold tabular-nums text-gray-900">
-                ${{ money(cut.totals_json?.total_sales) }}
-              </td>
-              <td class="px-5 py-3 text-gray-600">{{ cut.created_by }}</td>
-              <td class="px-5 py-3 text-gray-500 tabular-nums text-xs">
-                {{ fmtDate(cut.created_at) }} {{ fmtTime(cut.created_at) }}
-              </td>
-              <td class="px-5 py-3 text-center">
+          <tbody class="divide-y divide-slate-100">
+            <tr v-if="savedCuts.length === 0">
+              <td colspan="6" class="px-4 py-10 text-center text-sm text-slate-400">Todavia no hay cortes guardados.</td>
+            </tr>
+
+            <tr v-for="cut in savedCuts" :key="cut.id" class="transition-colors duration-150 hover:bg-slate-50/80">
+              <td class="py-2.5 pl-4 pr-2 text-sm font-medium text-slate-800">{{ fmtDate(`${cut.cut_date}T00:00:00`) }}</td>
+              <td class="px-2 py-2.5 text-right text-sm font-semibold text-emerald-700">{{ money(cut.totals_json?.total_sold ?? cut.totals_json?.total_sales ?? 0) }}</td>
+              <td class="px-2 py-2.5 text-right text-sm font-semibold text-sky-700">{{ money(cut.totals_json?.profit_total ?? 0) }}</td>
+              <td class="px-2 py-2.5 text-sm text-slate-600">{{ cut.created_by }}</td>
+              <td class="px-2 py-2.5 text-sm text-slate-500">{{ fmtDateTime(cut.created_at) }}</td>
+              <td class="py-2.5 pl-2 pr-4 text-right">
                 <Link
                   :href="route('cashcuts.show', cut.id)"
-                  class="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600
-                         hover:bg-gray-100 transition-colors"
-                >Ver</Link>
+                  class="inline-flex h-7 items-center rounded-md border border-slate-200 px-2 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Ver
+                </Link>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
-
-      <!-- Lista móvil -->
-      <ul v-if="savedCuts.length" class="sm:hidden divide-y divide-gray-100">
-        <li v-for="cut in savedCuts" :key="cut.id" class="flex items-center justify-between gap-3 px-4 py-3">
-          <div>
-            <p class="font-medium text-gray-800 text-sm">{{ fmtDate(cut.cut_date + 'T00:00:00') }}</p>
-            <p class="text-xs text-gray-400">{{ cut.created_by }} · {{ fmtTime(cut.created_at) }}</p>
-          </div>
-          <div class="flex items-center gap-2">
-            <span class="font-bold text-gray-900 text-sm">${{ money(cut.totals_json?.total_sales) }}</span>
-            <Link :href="route('cashcuts.show', cut.id)"
-                  class="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100">
-              Ver
-            </Link>
-          </div>
-        </li>
-      </ul>
-    </div>
-
+    </section>
   </div>
 </template>

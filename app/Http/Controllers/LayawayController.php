@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\AddLayawayPaymentRequest;
 use App\Http\Requests\LiquidateLayawayRequest;
 use App\Http\Requests\StoreLayawayRequest;
+use App\Http\Requests\UpdateLayawayVigenciaRequest;
 use App\Http\Resources\ProductResource;
 use App\Models\Customer;
 use App\Models\Layaway;
@@ -12,6 +13,7 @@ use App\Models\Product;
 use App\Services\InventoryService;
 use App\Services\LayawayService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -22,6 +24,8 @@ class LayawayController extends Controller
         $user   = $request->user();
         $status = (string) $request->query('status', 'open');
         $q      = (string) $request->query('q', '');
+        $vigencia = (string) $request->query('vigencia', 'all');
+        $upcomingDays = max(1, (int) $request->query('upcoming_days', 7));
 
         $query = Layaway::query()->with(['customer', 'creator']);
 
@@ -37,6 +41,16 @@ class LayawayController extends Controller
             });
         }
 
+        $today = Carbon::today();
+        if ($vigencia === 'expired') {
+            $query->whereNotNull('fecha_vencimiento')
+                ->whereDate('fecha_vencimiento', '<', $today);
+        } elseif ($vigencia === 'upcoming') {
+            $query->whereNotNull('fecha_vencimiento')
+                ->whereDate('fecha_vencimiento', '>=', $today)
+                ->whereDate('fecha_vencimiento', '<=', $today->copy()->addDays($upcomingDays));
+        }
+
         $layaways = $query
             ->orderByDesc('id')
             ->paginate(20)
@@ -46,6 +60,8 @@ class LayawayController extends Controller
             'filters' => [
                 'status' => $status,
                 'q'      => $q,
+                'vigencia' => $vigencia,
+                'upcoming_days' => $upcomingDays,
             ],
             'layaways' => $layaways,
             'can' => [
@@ -116,7 +132,7 @@ class LayawayController extends Controller
 
     public function addPayment(Layaway $layaway, AddLayawayPaymentRequest $request, LayawayService $service)
     {
-        $payment = $service->addPayment($layaway, $request->validated());
+        $payment = $service->addPayment($layaway, $request->validated(), $request->user());
 
         if (! $request->header('X-Inertia') || $request->expectsJson()) {
             return response()->json([
@@ -149,5 +165,25 @@ class LayawayController extends Controller
         $service->cancel($layaway);
 
         return redirect()->route('layaways.show', $layaway->id)->with('success', 'Apartado cancelado.');
+    }
+
+    public function updateVigencia(Layaway $layaway, UpdateLayawayVigenciaRequest $request, LayawayService $service)
+    {
+        $validated = $request->validated();
+        $updatedLayaway = $service->updateVigencia($layaway, (int) $validated['vigencia_dias']);
+
+        if (! $request->header('X-Inertia') || $request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Vigencia actualizada correctamente.',
+                'layaway_id' => (int) $updatedLayaway->id,
+                'vigencia_dias' => (int) $updatedLayaway->vigencia_dias,
+                'fecha_vencimiento' => $updatedLayaway->fecha_vencimiento?->toDateString(),
+            ]);
+        }
+
+        return redirect()
+            ->route('layaways.show', $layaway->id)
+            ->with('success', 'Vigencia actualizada.');
     }
 }

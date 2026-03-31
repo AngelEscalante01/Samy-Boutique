@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -18,6 +19,8 @@ class Layaway extends Model
         'status',
         'subtotal',
         'paid_total',
+        'vigencia_dias',
+        'fecha_vencimiento',
         'liquidated_at',
         'cancelled_at',
     ];
@@ -25,11 +28,13 @@ class Layaway extends Model
     protected $casts = [
         'subtotal' => 'decimal:2',
         'paid_total' => 'decimal:2',
+        'vigencia_dias' => 'integer',
+        'fecha_vencimiento' => 'date',
         'liquidated_at' => 'datetime',
         'cancelled_at' => 'datetime',
     ];
 
-    protected $appends = ['balance'];
+    protected $appends = ['balance', 'estado_vigencia'];
 
     public function customer(): BelongsTo
     {
@@ -62,5 +67,25 @@ class Layaway extends Model
         $paid = (string) $this->paid_total;
 
         return bcsub($subtotal, $paid, 2);
+    }
+
+    public function getEstadoVigenciaAttribute(): string
+    {
+        if (! $this->fecha_vencimiento instanceof CarbonInterface) {
+            return 'sin_vigencia';
+        }
+
+        $today = now()->startOfDay();
+        $dueDate = $this->fecha_vencimiento->copy()->startOfDay();
+
+        if ($dueDate->lt($today)) {
+            return 'vencido';
+        }
+
+        if ($dueDate->equalTo($today)) {
+            return 'vence_hoy';
+        }
+
+        return 'vigente';
     }
 }

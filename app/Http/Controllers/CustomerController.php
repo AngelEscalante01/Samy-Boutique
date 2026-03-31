@@ -16,8 +16,9 @@ class CustomerController extends Controller
     public function index(Request $request): Response
     {
         $user = $request->user();
-        $q      = $request->string('q')->toString();
-        $active = $request->string('active')->toString();
+        $q       = $request->string('q')->toString();
+        $active  = $request->string('active')->toString();
+        $segment = $request->string('segment')->toString();
 
         $customers = Customer::query()
             ->when($q !== '', function ($query) use ($q) {
@@ -28,6 +29,8 @@ class CustomerController extends Controller
                 });
             })
             ->when(in_array($active, ['0', '1'], true), fn ($query) => $query->where('active', (int) $active === 1))
+            ->when($segment === 'frequent', fn ($query) => $query->where('purchases_count', '>=', 5))
+            ->when($segment === 'new', fn ($query) => $query->where('created_at', '>=', now()->subDays(30)))
             ->orderBy('name')
             ->paginate(20)
             ->withQueryString();
@@ -36,6 +39,7 @@ class CustomerController extends Controller
             'filters' => [
                 'q'      => $q,
                 'active' => $active,
+                'segment' => $segment,
             ],
             'customers' => CustomerResource::collection($customers),
             'can' => [

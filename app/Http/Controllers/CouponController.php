@@ -17,6 +17,7 @@ class CouponController extends Controller
     {
         $q = $request->string('q')->toString();
         $active = $request->string('active')->toString();
+        $validity = $request->string('validity')->toString();
 
         $coupons = Coupon::query()
             ->withCount('redemptions')
@@ -27,6 +28,33 @@ class CouponController extends Controller
                 });
             })
             ->when(in_array($active, ['0', '1'], true), fn ($query) => $query->where('active', (int) $active === 1))
+            ->when(in_array($validity, ['active', 'upcoming', 'expired'], true), function ($query) use ($validity) {
+                $now = now();
+
+                if ($validity === 'active') {
+                    $query
+                        ->where(function ($sub) use ($now) {
+                            $sub->whereNull('starts_at')
+                                ->orWhere('starts_at', '<=', $now);
+                        })
+                        ->where(function ($sub) use ($now) {
+                            $sub->whereNull('ends_at')
+                                ->orWhere('ends_at', '>=', $now);
+                        });
+
+                    return;
+                }
+
+                if ($validity === 'upcoming') {
+                    $query->whereNotNull('starts_at')
+                        ->where('starts_at', '>', $now);
+
+                    return;
+                }
+
+                $query->whereNotNull('ends_at')
+                    ->where('ends_at', '<', $now);
+            })
             ->latest('id')
             ->paginate(15)
             ->withQueryString();
@@ -35,6 +63,7 @@ class CouponController extends Controller
             'filters' => [
                 'q' => $q,
                 'active' => $active,
+                'validity' => $validity,
             ],
             'coupons' => CouponResource::collection($coupons),
         ]);

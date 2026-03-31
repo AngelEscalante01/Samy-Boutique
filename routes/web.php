@@ -60,6 +60,25 @@ Route::get('/dashboard', [DashboardController::class, 'index'])
     ->middleware(['auth', 'verified'])
     ->name('dashboard');
 
+Route::prefix('dashboard/data')
+    ->middleware(['auth', 'verified'])
+    ->group(function () {
+        Route::get('/summary', [DashboardController::class, 'summary'])
+            ->name('dashboard.data.summary');
+
+        Route::get('/chart', [DashboardController::class, 'chart'])
+            ->name('dashboard.data.chart');
+
+        Route::get('/recent-sales', [DashboardController::class, 'recentSales'])
+            ->name('dashboard.data.recent-sales');
+
+        Route::get('/recent-layaways', [DashboardController::class, 'recentLayaways'])
+            ->name('dashboard.data.recent-layaways');
+
+        Route::get('/payment-summary', [DashboardController::class, 'paymentSummary'])
+            ->name('dashboard.data.payment-summary');
+    });
+
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
@@ -151,6 +170,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/sales', [SalesController::class, 'index'])
         ->middleware('permission:sales.view')
         ->name('sales.index');
+
+    Route::get('/sales/movements/{type}/{id}', [SalesController::class, 'movementShow'])
+        ->middleware('permission:sales.view')
+        ->name('sales.movements.show');
 
     Route::get('/sales/{sale}', [SalesController::class, 'show'])
         ->middleware('permission:sales.view')
@@ -383,6 +406,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/layaways/{layaway}/payments', [LayawayController::class, 'addPayment'])
         ->middleware('permission:pos.view')
         ->name('layaways.payments.store');
+
+    Route::patch('/layaways/{layaway}/vigencia', [LayawayController::class, 'updateVigencia'])
+        ->middleware('permission:pos.view')
+        ->name('layaways.vigencia.update');
 
     Route::get('/layaways/{layaway}/print-data/created', [LayawayPrintController::class, 'created'])
         ->middleware('permission:pos.view')

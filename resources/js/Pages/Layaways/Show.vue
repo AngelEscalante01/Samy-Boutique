@@ -12,10 +12,18 @@ const flash = computed(() => usePage().props.flash ?? {})
 const page = usePage()
 const isOpen = computed(() => props.layaway.status === 'open')
 const paymentPrintMessage = ref(null) // { type: 'success' | 'warning' | 'error', text: string }
+const vigenciaMessage = ref(null)
 const AUTO_PRINT_FINAL_SALE_AFTER_LIQUIDATION = false
 const isReprintingCreated = ref(false)
 const isReprintingClosed = ref(false)
 const reprintingPaymentId = ref(null)
+const vigenciaOpciones = [7, 15, 30, 45, 60]
+
+const initialVigencia = Number(props.layaway.vigencia_dias || 0)
+const initialInPreset = vigenciaOpciones.includes(initialVigencia)
+const vigenciaSeleccion = ref(initialVigencia > 0 ? (initialInPreset ? String(initialVigencia) : 'manual') : '30')
+const vigenciaManual = ref(initialVigencia > 0 && !initialInPreset ? String(initialVigencia) : '')
+const vigenciaForm = useForm({ vigencia_dias: initialVigencia > 0 ? initialVigencia : 30 })
 
 const badgeClass = { open: 'bg-amber-100 text-amber-800', liquidated: 'bg-emerald-100 text-emerald-800', cancelled: 'bg-red-100 text-red-700' }
 const statusLabel = { open: 'Activo', liquidated: 'Liquidado', cancelled: 'Cancelado' }
@@ -25,6 +33,92 @@ function money(v) { return Number(v).toFixed(2) }
 function fmtDate(d) { if (!d) return '—'; return new Date(d).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) }
 function fmtDateShort(d) { if (!d) return '—'; return new Date(d).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) }
 function thumbUrl(product) { const img = product?.images?.[0]; return img ? '/storage/' + img.path : null }
+
+const vigenciaDiasSeleccionados = computed(() => {
+  if (vigenciaSeleccion.value === 'manual') {
+    return Number(vigenciaManual.value || 0)
+  }
+
+  return Number(vigenciaSeleccion.value || 0)
+})
+
+const vigenciaEstadoLabel = {
+  vigente: 'Vigente',
+  vence_hoy: 'Vence hoy',
+  vencido: 'Vencido',
+  sin_vigencia: 'Sin vigencia',
+}
+
+const vigenciaEstadoClass = {
+  vigente: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  vence_hoy: 'bg-amber-100 text-amber-800 border-amber-200',
+  vencido: 'bg-red-100 text-red-700 border-red-200',
+  sin_vigencia: 'bg-slate-100 text-slate-700 border-slate-200',
+}
+
+const fechaApartadoBase = computed(() => {
+  if (props.layaway.created_at) {
+    const date = new Date(props.layaway.created_at)
+    date.setHours(0, 0, 0, 0)
+    return date
+  }
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return today
+})
+
+const fechaVencimientoPreview = computed(() => {
+  const dias = vigenciaDiasSeleccionados.value
+  if (!Number.isInteger(dias) || dias <= 0) return null
+
+  const due = new Date(fechaApartadoBase.value)
+  due.setDate(due.getDate() + dias)
+  return due
+})
+
+const canEditVigencia = computed(() => props.layaway.status === 'open')
+
+const showExpiredWarning = computed(() => props.layaway.estado_vigencia === 'vencido' && props.layaway.status === 'open')
+const showDueTodayWarning = computed(() => props.layaway.estado_vigencia === 'vence_hoy' && props.layaway.status === 'open')
+
+function submitVigencia() {
+  vigenciaMessage.value = null
+
+  if (!canEditVigencia.value) {
+    vigenciaMessage.value = {
+      type: 'warning',
+      text: 'La vigencia ya no puede modificarse en apartados liquidados o cancelados.',
+    }
+    return
+  }
+
+  const dias = vigenciaDiasSeleccionados.value
+  if (!Number.isInteger(dias) || dias <= 0) {
+    vigenciaMessage.value = {
+      type: 'error',
+      text: 'La vigencia debe ser un numero entero mayor a 0 dias.',
+    }
+    return
+  }
+
+  vigenciaForm.vigencia_dias = dias
+  vigenciaForm.patch(route('layaways.vigencia.update', props.layaway.id), {
+    preserveScroll: true,
+    onError: () => {
+      vigenciaMessage.value = {
+        type: 'error',
+        text: 'No se pudo actualizar la vigencia. Verifica los datos e intenta nuevamente.',
+      }
+    },
+    onSuccess: () => {
+      vigenciaMessage.value = {
+        type: 'success',
+        text: 'Vigencia actualizada correctamente.',
+      }
+    },
+  })
+}
 
 const addPaymentForm = useForm({ method: 'cash', amount: '', reference: '' })
 function submitAddPayment() {
@@ -256,6 +350,26 @@ async function reprintClosedTicket() {
       {{ paymentPrintMessage.text }}
     </div>
 
+    <div
+      v-if="vigenciaMessage"
+      class="rounded-xl border px-4 py-3 text-sm"
+      :class="vigenciaMessage.type === 'success'
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+        : vigenciaMessage.type === 'warning'
+          ? 'border-amber-200 bg-amber-50 text-amber-800'
+          : 'border-red-200 bg-red-50 text-red-800'"
+    >
+      {{ vigenciaMessage.text }}
+    </div>
+
+    <div v-if="showExpiredWarning" class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+      Este apartado esta vencido. Revisa con el cliente antes de registrar nuevos abonos.
+    </div>
+
+    <div v-if="showDueTodayWarning" class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+      Este apartado vence hoy. Considera renovar vigencia o liquidarlo hoy mismo.
+    </div>
+
     <!-- Stat cards -->
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
       <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
@@ -269,6 +383,31 @@ async function reprintClosedTicket() {
       <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
         <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Saldo</p>
         <p class="mt-1 text-2xl font-bold" :class="remaining > 0 ? 'text-amber-600' : 'text-gray-400'">${{ money(layaway.balance) }}</p>
+      </div>
+    </div>
+
+    <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+      <h2 class="text-sm font-semibold text-gray-700">Vigencia del apartado</h2>
+      <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-4">
+        <div>
+          <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Fecha apartado</p>
+          <p class="mt-1 text-sm font-semibold text-gray-800">{{ fmtDateShort(layaway.created_at) }}</p>
+        </div>
+        <div>
+          <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Vigencia</p>
+          <p class="mt-1 text-sm font-semibold text-gray-800">{{ layaway.vigencia_dias ? layaway.vigencia_dias + ' dias' : 'Sin vigencia' }}</p>
+        </div>
+        <div>
+          <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Vence el</p>
+          <p class="mt-1 text-sm font-semibold text-gray-800">{{ fmtDateShort(layaway.fecha_vencimiento) }}</p>
+        </div>
+        <div>
+          <p class="text-xs font-medium uppercase tracking-wide text-gray-500">Estado</p>
+          <span class="mt-1 inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold"
+            :class="vigenciaEstadoClass[layaway.estado_vigencia] ?? vigenciaEstadoClass.sin_vigencia">
+            {{ vigenciaEstadoLabel[layaway.estado_vigencia] ?? vigenciaEstadoLabel.sin_vigencia }}
+          </span>
+        </div>
       </div>
     </div>
 
@@ -353,6 +492,36 @@ async function reprintClosedTicket() {
 
       <!-- Right column: actions -->
       <div class="space-y-4">
+        <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 space-y-3">
+          <h2 class="text-sm font-semibold text-gray-700">Editar vigencia</h2>
+          <p class="text-xs text-gray-500">Solo disponible para apartados abiertos.</p>
+
+          <select v-model="vigenciaSeleccion" :disabled="!canEditVigencia"
+            class="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 disabled:bg-gray-50">
+            <option v-for="dias in vigenciaOpciones" :key="dias" :value="String(dias)">{{ dias }} dias</option>
+            <option value="manual">Otro (captura manual)</option>
+          </select>
+
+          <div v-if="vigenciaSeleccion === 'manual'">
+            <label class="mb-1 block text-xs font-medium text-gray-600">Dias de vigencia</label>
+            <input v-model="vigenciaManual" type="number" min="1" step="1" :disabled="!canEditVigencia"
+              class="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400 disabled:bg-gray-50" />
+          </div>
+
+          <p v-if="vigenciaForm.errors.vigencia_dias" class="text-xs text-red-600">{{ vigenciaForm.errors.vigencia_dias }}</p>
+
+          <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <p>Fecha apartado: <strong>{{ fmtDateShort(fechaApartadoBase) }}</strong></p>
+            <p>Vigencia seleccionada: <strong>{{ Number.isInteger(vigenciaDiasSeleccionados) && vigenciaDiasSeleccionados > 0 ? vigenciaDiasSeleccionados + ' dias' : 'Invalida' }}</strong></p>
+            <p>Nuevo vencimiento: <strong>{{ fechaVencimientoPreview ? fmtDateShort(fechaVencimientoPreview) : 'Fecha invalida' }}</strong></p>
+          </div>
+
+          <button @click="submitVigencia" :disabled="vigenciaForm.processing || !canEditVigencia"
+            class="w-full rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-700 transition disabled:opacity-50">
+            {{ vigenciaForm.processing ? 'Actualizando...' : 'Actualizar vigencia' }}
+          </button>
+        </div>
+
         <!-- Add payment -->
         <div v-if="isOpen" class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 space-y-4">
           <h2 class="text-sm font-semibold text-gray-700">Registrar abono</h2>

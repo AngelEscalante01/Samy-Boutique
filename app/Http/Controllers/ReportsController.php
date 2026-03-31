@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\CashCut;
 use App\Models\Customer;
 use App\Models\Sale;
+use App\Services\SalesAnalyticsService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -13,72 +14,30 @@ use Inertia\Inertia;
 
 class ReportsController extends Controller
 {
-    /**
-     * Página principal de reportes con filtros de rango de fechas.
-     */
+    public function __construct(private readonly SalesAnalyticsService $salesAnalytics)
+    {
+    }
+
     public function index(Request $request)
     {
         $from = $request->query('from', now()->startOfMonth()->toDateString());
-        $to   = $request->query('to',   now()->toDateString());
+        $to = $request->query('to', now()->toDateString());
 
         try {
-            $start = Carbon::createFromFormat('Y-m-d', $from)->startOfDay();
-            $end   = Carbon::createFromFormat('Y-m-d', $to)->endOfDay();
+            $start = Carbon::createFromFormat('Y-m-d', (string) $from)->startOfDay();
+            $end = Carbon::createFromFormat('Y-m-d', (string) $to)->endOfDay();
         } catch (\Throwable) {
             $start = now()->startOfMonth()->startOfDay();
-            $end   = now()->endOfDay();
+            $end = now()->endOfDay();
+            $from = $start->toDateString();
+            $to = $end->toDateString();
         }
 
-        /* ── Sales summary ──────────────────────────────────────────────── */
-        $salesBase = Sale::query()
-            ->where('status', 'completed')
-            ->whereBetween('created_at', [$start, $end]);
+        $reportMetrics = $this->salesAnalytics->buildRangeReport($start, $end);
 
-        $salesCount = (int) (clone $salesBase)->count();
+        $salesSummary = $reportMetrics['summary'];
+        $dailySummary = $reportMetrics['daily'];
 
-        $salesTotals = (clone $salesBase)
-            ->selectRaw('COALESCE(SUM(subtotal),0)               as subtotal_sum')
-            ->selectRaw('COALESCE(SUM(discount_total),0)         as discount_sum')
-            ->selectRaw('COALESCE(SUM(coupon_discount_total),0)  as coupon_sum')
-            ->selectRaw('COALESCE(SUM(loyalty_discount_total),0) as loyalty_sum')
-            ->selectRaw('COALESCE(SUM(total),0)                  as total_sum')
-            ->first();
-
-        $canceledCount = (int) Sale::query()
-            ->where('status', 'cancelled')
-            ->whereBetween('created_at', [$start, $end])
-            ->count();
-
-        $total    = (float) $salesTotals->total_sum;
-        $avgTicket = $salesCount > 0 ? round($total / $salesCount, 2) : 0.0;
-
-        $salesSummary = [
-            'total'           => $total,
-            'count'           => $salesCount,
-            'avg_ticket'      => $avgTicket,
-            'discounts_total' => (float) $salesTotals->discount_sum,
-            'coupons_total'   => (float) $salesTotals->coupon_sum,
-            'loyalty_total'   => (float) $salesTotals->loyalty_sum,
-            'canceled_count'  => $canceledCount,
-        ];
-
-        /* ── Ventas por día ─────────────────────────────────────────────── */
-        $salesByDay = Sale::query()
-            ->where('status', 'completed')
-            ->whereBetween('created_at', [$start, $end])
-            ->selectRaw('DATE(created_at) as date')
-            ->selectRaw('COALESCE(SUM(total),0)  as total')
-            ->selectRaw('COUNT(*)                as count')
-            ->groupByRaw('DATE(created_at)')
-            ->orderByRaw('DATE(created_at)')
-            ->get()
-            ->map(fn ($r) => [
-                'date'  => $r->date,
-                'total' => (float) $r->total,
-                'count' => (int) $r->count,
-            ]);
-
-        /* ── Top categorías ─────────────────────────────────────────────── */
         $topCategories = DB::table('sale_items')
             ->join('sales', 'sale_items.sale_id', '=', 'sales.id')
             ->join('products', 'sale_items.product_id', '=', 'products.id')
@@ -86,91 +45,78 @@ class ReportsController extends Controller
             ->where('sales.status', 'completed')
             ->whereBetween('sales.created_at', [$start, $end])
             ->groupBy('categories.id', 'categories.name')
-            ->selectRaw("COALESCE(categories.name, 'Sin categoría') as name")
-            ->selectRaw('SUM(sale_items.quantity) as qty')
+            ->selectRaw("COALESCE(categories.name, 'Sin categoria') as name")
+            ->selectRaw('SUM(COALESCE(sale_items.qty, sale_items.quantity, 1)) as qty')
             ->selectRaw('COALESCE(SUM(sale_items.line_total),0) as total')
             ->orderByDesc('total')
             ->limit(10)
             ->get()
-            ->map(fn ($r) => [
-                'name'  => $r->name,
-                'qty'   => (int) $r->qty,
-                'total' => (float) $r->total,
+            ->map(fn ($row) => [
+                'name' => (string) $row->name,
+                'qty' => (int) $row->qty,
+                'total' => round((float) $row->total, 2),
             ]);
 
-        /* ── Top productos ──────────────────────────────────────────────── */
         $topProducts = DB::table('sale_items')
             ->join('sales', 'sale_items.sale_id', '=', 'sales.id')
             ->where('sales.status', 'completed')
             ->whereBetween('sales.created_at', [$start, $end])
             ->groupBy('sale_items.product_id', 'sale_items.sku', 'sale_items.name')
-            ->selectRaw('sale_items.sku  as sku')
+            ->selectRaw('sale_items.sku as sku')
             ->selectRaw('sale_items.name as name')
-            ->selectRaw('SUM(sale_items.quantity)                 as qty')
-            ->selectRaw('COALESCE(SUM(sale_items.line_total),0)   as total')
+            ->selectRaw('SUM(COALESCE(sale_items.qty, sale_items.quantity, 1)) as qty')
+            ->selectRaw('COALESCE(SUM(sale_items.line_total),0) as total')
             ->orderByDesc('total')
             ->limit(15)
             ->get()
-            ->map(fn ($r) => [
-                'sku'   => $r->sku,
-                'name'  => $r->name,
-                'qty'   => (int) $r->qty,
-                'total' => (float) $r->total,
+            ->map(fn ($row) => [
+                'sku' => $row->sku,
+                'name' => (string) $row->name,
+                'qty' => (int) $row->qty,
+                'total' => round((float) $row->total, 2),
             ]);
 
-        /* ── Inventario ─────────────────────────────────────────────────── */
-        $availableCount = (int) DB::table('products')->where('status', 'disponible')->count();
-        $layawayCount   = (int) DB::table('layaway_items')
-            ->join('layaways', 'layaway_items.layaway_id', '=', 'layaways.id')
-            ->whereIn('layaways.status', ['pending', 'partial'])
-            ->count();
-
-        $inventoryCounts = [
-            'available' => $availableCount,
-            'layaway'   => $layawayCount,
-        ];
-
-        /* ── Top clientes ───────────────────────────────────────────────── */
         $topCustomers = DB::table('sales')
             ->join('customers', 'sales.customer_id', '=', 'customers.id')
             ->where('sales.status', 'completed')
             ->whereBetween('sales.created_at', [$start, $end])
             ->groupBy('customers.id', 'customers.name', 'customers.phone')
-            ->selectRaw('customers.name  as name')
+            ->selectRaw('customers.name as name')
             ->selectRaw('customers.phone as phone')
             ->selectRaw('COUNT(*) as purchases_in_range')
             ->selectRaw('COALESCE(SUM(sales.total),0) as total_spent')
             ->orderByDesc('total_spent')
             ->limit(10)
             ->get()
-            ->map(fn ($r) => [
-                'name'               => $r->name,
-                'phone'              => $r->phone,
-                'purchases_in_range' => (int) $r->purchases_in_range,
-                'total_spent'        => (float) $r->total_spent,
+            ->map(fn ($row) => [
+                'name' => (string) $row->name,
+                'phone' => $row->phone,
+                'purchases_in_range' => (int) $row->purchases_in_range,
+                'total_spent' => round((float) $row->total_spent, 2),
             ]);
 
-        /* ── Near loyalty ───────────────────────────────────────────────── */
         $nearLoyalty = Customer::query()
             ->whereBetween('purchases_count', [4, 4])
             ->select(['id', 'name', 'phone', 'purchases_count'])
             ->orderBy('name')
             ->limit(20)
             ->get()
-            ->map(fn ($c) => [
-                'name'            => $c->name,
-                'phone'           => $c->phone,
-                'purchases_count' => $c->purchases_count,
+            ->map(fn ($customer) => [
+                'name' => (string) $customer->name,
+                'phone' => $customer->phone,
+                'purchases_count' => (int) $customer->purchases_count,
             ]);
 
         return Inertia::render('Reports/Index', [
-            'filters'              => ['from' => $from, 'to' => $to],
-            'salesSummary'         => $salesSummary,
-            'salesByDay'           => $salesByDay,
-            'topCategories'        => $topCategories,
-            'topProducts'          => $topProducts,
-            'inventoryCounts'      => $inventoryCounts,
-            'topCustomers'         => $topCustomers,
+            'filters' => [
+                'from' => $from,
+                'to' => $to,
+            ],
+            'salesSummary' => $salesSummary,
+            'dailySummary' => $dailySummary,
+            'topCategories' => $topCategories,
+            'topProducts' => $topProducts,
+            'topCustomers' => $topCustomers,
             'nearLoyaltyCustomers' => $nearLoyalty,
         ]);
     }
@@ -228,62 +174,21 @@ class ReportsController extends Controller
         return response()->json(['cash_cut' => $cut], 201);
     }
 
-    /**
-     * Consulta principal del corte diario.
-     *
-     * Incluye:
-     * - total ventas pagadas (status=completed)
-     * - descuentos (discount_total)
-     * - cupones (coupon_discount_total)
-     * - fidelidad (loyalty_discount_total)
-     * - total por método (sale_payments)
-     * - número de ventas
-     * - top productos y categorías (opcional)
-     */
     private function computeDailyCutTotals(string $date): array
     {
+        $dailyMetrics = $this->salesAnalytics->buildDailyCutMetrics($date);
+        $summary = $dailyMetrics['summary'];
+
         try {
             $day = Carbon::createFromFormat('Y-m-d', $date)->startOfDay();
         } catch (\Throwable) {
             throw ValidationException::withMessages([
-                'date' => ['Fecha inválida.'],
+                'date' => ['Fecha invalida.'],
             ]);
         }
 
         $start = $day->copy();
         $end = $day->copy()->endOfDay();
-
-        $salesBase = Sale::query()
-            ->where('status', 'completed')
-            ->whereBetween('created_at', [$start, $end]);
-
-        $salesCount = (int) (clone $salesBase)->count();
-
-        $salesTotals = (clone $salesBase)
-            ->selectRaw('COALESCE(SUM(subtotal),0) as subtotal_sum')
-            ->selectRaw('COALESCE(SUM(discount_total),0) as discount_sum')
-            ->selectRaw('COALESCE(SUM(coupon_discount_total),0) as coupon_discount_sum')
-            ->selectRaw('COALESCE(SUM(loyalty_discount_total),0) as loyalty_discount_sum')
-            ->selectRaw('COALESCE(SUM(total),0) as total_sum')
-            ->first();
-
-        $paymentRows = DB::table('sale_payments')
-            ->join('sales', 'sale_payments.sale_id', '=', 'sales.id')
-            ->where('sales.status', 'completed')
-            ->whereBetween('sales.created_at', [$start, $end])
-            ->groupBy('sale_payments.method')
-            ->selectRaw('sale_payments.method as method')
-            ->selectRaw('COALESCE(SUM(sale_payments.amount),0) as amount_sum')
-            ->get();
-
-        $paymentsByMethod = collect($paymentRows)
-            ->mapWithKeys(fn ($r) => [(string) $r->method => number_format((float) $r->amount_sum, 2, '.', '')])
-            ->all();
-
-        // Completar métodos conocidos para UI consistente
-        foreach (['cash', 'card', 'transfer', 'other'] as $method) {
-            $paymentsByMethod[$method] = $paymentsByMethod[$method] ?? '0.00';
-        }
 
         $topProducts = DB::table('sale_items')
             ->join('sales', 'sale_items.sale_id', '=', 'sales.id')
@@ -293,11 +198,18 @@ class ReportsController extends Controller
             ->selectRaw('sale_items.product_id as product_id')
             ->selectRaw('sale_items.sku as sku')
             ->selectRaw('sale_items.name as name')
-            ->selectRaw('COUNT(*) as qty')
+            ->selectRaw('SUM(COALESCE(sale_items.qty, sale_items.quantity, 1)) as qty')
             ->selectRaw('COALESCE(SUM(sale_items.line_total),0) as total')
             ->orderByDesc('total')
             ->limit(10)
-            ->get();
+            ->get()
+            ->map(fn ($row) => [
+                'product_id' => (int) $row->product_id,
+                'sku' => $row->sku,
+                'name' => (string) $row->name,
+                'qty' => (int) $row->qty,
+                'total' => round((float) $row->total, 2),
+            ]);
 
         $topCategories = DB::table('sale_items')
             ->join('sales', 'sale_items.sale_id', '=', 'sales.id')
@@ -307,40 +219,44 @@ class ReportsController extends Controller
             ->whereBetween('sales.created_at', [$start, $end])
             ->groupBy('categories.id', 'categories.name')
             ->selectRaw('categories.id as category_id')
-            ->selectRaw('COALESCE(categories.name, "Sin categoría") as name')
-            ->selectRaw('COUNT(*) as qty')
+            ->selectRaw("COALESCE(categories.name, 'Sin categoria') as name")
+            ->selectRaw('SUM(COALESCE(sale_items.qty, sale_items.quantity, 1)) as qty')
             ->selectRaw('COALESCE(SUM(sale_items.line_total),0) as total')
             ->orderByDesc('total')
             ->limit(10)
-            ->get();
-
-        $cancelledSales = Sale::query()
-            ->where('status', 'cancelled')
-            ->whereBetween('created_at', [$start, $end])
-            ->select(['id', 'total', 'created_at', 'cancel_reason'])
-            ->orderByDesc('created_at')
             ->get()
-            ->map(fn (Sale $sale) => [
-                'id' => $sale->id,
-                'total' => (float) $sale->total,
-                'created_at' => $sale->created_at?->toDateTimeString(),
-                'cancel_reason' => $sale->cancel_reason,
-            ])
-            ->values();
+            ->map(fn ($row) => [
+                'category_id' => $row->category_id ? (int) $row->category_id : null,
+                'name' => (string) $row->name,
+                'qty' => (int) $row->qty,
+                'total' => round((float) $row->total, 2),
+            ]);
 
         return [
-            'date' => $date,
-            'sales_count' => $salesCount,
-            'subtotal_sum' => number_format((float) $salesTotals->subtotal_sum, 2, '.', ''),
-            'discount_sum' => number_format((float) $salesTotals->discount_sum, 2, '.', ''),
-            'coupon_discount_sum' => number_format((float) $salesTotals->coupon_discount_sum, 2, '.', ''),
-            'loyalty_discount_sum' => number_format((float) $salesTotals->loyalty_discount_sum, 2, '.', ''),
-            'total_sum' => number_format((float) $salesTotals->total_sum, 2, '.', ''),
-            'payments_by_method' => $paymentsByMethod,
+            'date' => $summary['date'] ?? $date,
+            'sales_count' => (int) ($summary['sales_count'] ?? 0),
+            'subtotal_sum' => number_format((float) ($summary['subtotal_sum'] ?? 0), 2, '.', ''),
+            'discount_sum' => number_format((float) ($summary['manual_discount_total'] ?? 0), 2, '.', ''),
+            'coupon_discount_sum' => number_format((float) ($summary['coupon_discount_total'] ?? 0), 2, '.', ''),
+            'loyalty_discount_sum' => number_format((float) ($summary['loyalty_discount_total'] ?? 0), 2, '.', ''),
+            'total_sum' => number_format((float) ($summary['total_sold'] ?? 0), 2, '.', ''),
+            'profit_sum' => number_format((float) ($summary['profit_total'] ?? 0), 2, '.', ''),
+            'total_sold' => number_format((float) ($summary['total_sold'] ?? 0), 2, '.', ''),
+            'total_sales' => number_format((float) ($summary['total_sold'] ?? 0), 2, '.', ''),
+            'profit_total' => number_format((float) ($summary['profit_total'] ?? 0), 2, '.', ''),
+            'manual_discount_total' => number_format((float) ($summary['manual_discount_total'] ?? 0), 2, '.', ''),
+            'coupon_discount_total' => number_format((float) ($summary['coupon_discount_total'] ?? 0), 2, '.', ''),
+            'loyalty_discount_total' => number_format((float) ($summary['loyalty_discount_total'] ?? 0), 2, '.', ''),
+            'payments_by_method' => $summary['payments_by_method'] ?? [
+                'cash' => 0,
+                'card' => 0,
+                'transfer' => 0,
+                'other' => 0,
+            ],
             'top_products' => $topProducts,
             'top_categories' => $topCategories,
-            'cancelled_count' => $cancelledSales->count(),
-            'cancelled_sales' => $cancelledSales,
+            'cancelled_count' => (int) ($summary['canceled_count'] ?? 0),
+            'cancelled_sales' => $summary['cancelled_sales'] ?? [],
         ];
     }
 }
