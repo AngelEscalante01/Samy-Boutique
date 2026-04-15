@@ -16,6 +16,7 @@ class LayawayPayment extends Model
         'method',
         'amount',
         'reference',
+        'observacion',
         'paid_at',
     ];
 

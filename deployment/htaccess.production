@@ -16,8 +16,8 @@
     RewriteCond %{REQUEST_METHOD} OPTIONS
     RewriteRule ^ - [L,R=204]
 
-    # Ensure rewrite rules work when the app is served from a subdirectory.
-    RewriteBase /boutique/Samy-Boutique/public/
+    # RewriteBase para producción (document root apunta a public/)
+    RewriteBase /
 
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .

@@ -21,6 +21,7 @@ class Layaway extends Model
         'paid_total',
         'vigencia_dias',
         'fecha_vencimiento',
+        'observaciones',
         'liquidated_at',
         'cancelled_at',
     ];

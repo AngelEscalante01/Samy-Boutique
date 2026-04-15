@@ -91,6 +91,7 @@ class LayawayService
                 'paid_total' => '0.00',
                 'vigencia_dias' => $vigenciaDias,
                 'fecha_vencimiento' => now()->startOfDay()->addDays($vigenciaDias)->toDateString(),
+                'observaciones' => Arr::get($payload, 'observaciones'),
             ]);
 
             foreach ($itemsPayload as $item) {
@@ -441,6 +442,7 @@ class LayawayService
             'method' => $method,
             'amount' => number_format($amount, 2, '.', ''),
             'reference' => $payload['reference'] ?? null,
+            'observacion' => $payload['observacion'] ?? null,
             'paid_at' => $payload['paid_at'] ?? now(),
         ]);
 
