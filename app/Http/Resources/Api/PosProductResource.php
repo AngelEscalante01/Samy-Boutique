@@ -54,6 +54,7 @@ class PosProductResource extends JsonResource
             'name' => $this->name,
             'sku' => $this->sku,
             'status' => $this->status,
+            'gender' => $this->gender,
             'category' => $this->category ? [
                 'id' => (int) $this->category->id,
                 'name' => $this->category->name,

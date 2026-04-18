@@ -16,18 +16,23 @@ class ProductController extends ApiController
         $this->ensureAnyPermission($request, ['pos.view', 'products.view']);
 
         $validated = $request->validate([
-            'q' => ['nullable', 'string', 'max:120'],
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+            'q'           => ['nullable', 'string', 'max:120'],
+            'per_page'    => ['nullable', 'integer', 'min:1', 'max:100'],
+            'gender'      => ['nullable', 'string', 'in:dama,caballero,unisex'],
+            'category_id' => ['nullable', 'integer', 'min:1'],
         ]);
 
-        $search = trim((string) ($validated['q'] ?? ''));
-        $perPage = (int) ($validated['per_page'] ?? 30);
+        $search     = trim((string) ($validated['q'] ?? ''));
+        $perPage    = (int) ($validated['per_page'] ?? 30);
+        $gender     = $validated['gender'] ?? null;
+        $categoryId = isset($validated['category_id']) ? (int) $validated['category_id'] : null;
 
         $products = Product::query()
             ->select([
                 'id',
                 'sku',
                 'name',
+                'gender',
                 'category_id',
                 'sale_price',
                 'sale_price_base',
@@ -35,6 +40,8 @@ class ProductController extends ApiController
             ])
             ->where('status', 'disponible')
             ->tap(fn ($query) => $inventoryService->scopeSellableProducts($query))
+            ->when($gender !== null, fn ($q) => $q->where('gender', $gender))
+            ->when($categoryId !== null, fn ($q) => $q->where('category_id', $categoryId))
             ->when($search !== '', function ($query) use ($search) {
                 $like = "%{$search}%";
 
