@@ -73,4 +73,27 @@ class StoreApiSaleRequest extends FormRequest
             'sucursal_nombre' => ['nullable', 'string', 'max:120'],
         ];
     }
+
+    public function messages(): array
+    {
+        return [
+            'items.required'               => 'El carrito no puede estar vacío.',
+            'items.min'                    => 'El carrito no puede estar vacío.',
+            'items.*.variant_id.required'  => 'Cada ítem requiere una variante válida.',
+            'items.*.variant_id.exists'    => 'Una o más variantes no existen.',
+            'items.*.qty.required'         => 'La cantidad de cada ítem es obligatoria.',
+            'items.*.qty.min'              => 'La cantidad mínima por ítem es 1.',
+            'payments.required'            => 'Agrega al menos un método de pago.',
+            'payments.min'                 => 'Agrega al menos un método de pago.',
+            'payments.*.method.required'   => 'El método de pago es obligatorio.',
+            'payments.*.method.in'         => 'Método de pago no válido.',
+            'payments.*.amount.required'   => 'El monto del pago es obligatorio.',
+            'payments.*.amount.min'        => 'El monto de cada pago debe ser mayor a $0.',
+            'dinero_recibido.required'     => 'Ingresa el dinero recibido.',
+            'dinero_recibido.min'          => 'El dinero recibido debe ser mayor a $0.',
+            'global_discount_type.in'      => 'Tipo de descuento global no válido.',
+            'global_discount_value.min'    => 'El descuento global no puede ser negativo.',
+            'coupon_code.max'              => 'El código de cupón es demasiado largo.',
+        ];
+    }
 }

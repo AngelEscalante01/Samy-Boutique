@@ -13,6 +13,7 @@ use App\Models\SalePayment;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\InventoryService;
+use App\Services\NotificationService;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -20,9 +21,10 @@ use Illuminate\Validation\ValidationException;
 
 class CreateSaleAction
 {
-    public function __construct(private readonly InventoryService $inventoryService)
-    {
-    }
+    public function __construct(
+        private readonly InventoryService $inventoryService,
+        private readonly NotificationService $notificationService,
+    ) {}
 
     /**
      * Crea una venta completa.
@@ -35,7 +37,7 @@ class CreateSaleAction
      */
     public function execute(array $payload, User $user): Sale
     {
-        return DB::transaction(function () use ($payload, $user) {
+        $sale = DB::transaction(function () use ($payload, $user) {
             $itemsPayload = Arr::get($payload, 'items', []);
             $paymentsPayload = Arr::get($payload, 'payments', []);
 
@@ -395,6 +397,10 @@ class CreateSaleAction
 
             return $sale;
         });
+
+        $this->notificationService->notifySale($sale, $user);
+
+        return $sale;
     }
 
     private function normalizeDiscountType(string $type): ?string

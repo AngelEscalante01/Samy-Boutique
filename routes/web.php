@@ -14,6 +14,7 @@ use App\Http\Controllers\CouponController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\CashCutsController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\NotificationSettingsController;
 use App\Http\Controllers\SalesPrintController;
 use App\Http\Controllers\PublicCatalogController;
 use App\Http\Controllers\SyncSalesController;
@@ -312,6 +313,27 @@ Route::middleware('auth')->group(function () {
         Route::put('/settings', [SettingsController::class, 'update'])
             ->middleware(['role:gerente', 'permission:settings.manage'])
             ->name('settings.update');
+
+        // Notificaciones por correo (solo gerente)
+        Route::get('/notifications', [NotificationSettingsController::class, 'index'])
+            ->middleware(['role:gerente'])
+            ->name('notifications.index');
+
+        Route::post('/notifications/emails', [NotificationSettingsController::class, 'storeEmail'])
+            ->middleware(['role:gerente'])
+            ->name('notifications.emails.store');
+
+        Route::patch('/notifications/emails/{email}/toggle', [NotificationSettingsController::class, 'toggleEmail'])
+            ->middleware(['role:gerente'])
+            ->name('notifications.emails.toggle');
+
+        Route::delete('/notifications/emails/{email}', [NotificationSettingsController::class, 'destroyEmail'])
+            ->middleware(['role:gerente'])
+            ->name('notifications.emails.destroy');
+
+        Route::put('/notifications/settings', [NotificationSettingsController::class, 'updateSettings'])
+            ->middleware(['role:gerente'])
+            ->name('notifications.settings.update');
 
     // Temporal: ejecutar migraciones desde web en producción sin terminal.
     Route::get('/_ops/temp/run-migrations', function (Request $request) {

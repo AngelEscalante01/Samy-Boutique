@@ -13,6 +13,7 @@ use App\Models\SaleItem;
 use App\Models\SalePayment;
 use App\Models\Setting;
 use App\Models\User;
+use App\Services\NotificationService;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -20,13 +21,14 @@ use Illuminate\Validation\ValidationException;
 
 class LayawayService
 {
-    public function __construct(private readonly InventoryService $inventoryService)
-    {
-    }
+    public function __construct(
+        private readonly InventoryService $inventoryService,
+        private readonly NotificationService $notificationService,
+    ) {}
 
     public function create(array $payload, User $user): Layaway
     {
-        return DB::transaction(function () use ($payload, $user) {
+        $layaway = DB::transaction(function () use ($payload, $user) {
             $customerId = Arr::get($payload, 'customer_id');
             $customerId = $customerId !== null ? (int) $customerId : null;
             $vigenciaDias = max(1, (int) Arr::get($payload, 'vigencia_dias', 0));
@@ -130,6 +132,10 @@ class LayawayService
 
             return $layaway->fresh(['items.product', 'items.variant.size', 'items.variant.color', 'payments', 'customer', 'creator']);
         });
+
+        $this->notificationService->notifyLayawayCreated($layaway, $user);
+
+        return $layaway;
     }
 
     public function updateVigencia(Layaway $layaway, int $vigenciaDias): Layaway
@@ -157,7 +163,7 @@ class LayawayService
 
     public function addPayment(Layaway $layaway, array $payload, ?User $user = null): LayawayPayment
     {
-        return DB::transaction(function () use ($layaway, $payload, $user) {
+        $payment = DB::transaction(function () use ($layaway, $payload, $user) {
             /** @var Layaway $locked */
             $locked = Layaway::query()->lockForUpdate()->findOrFail($layaway->id);
 
@@ -173,6 +179,13 @@ class LayawayService
 
             return $payment;
         });
+
+        if ($user !== null) {
+            $layaway->refresh();
+            $this->notificationService->notifyLayawayPayment($layaway, $payment, $user);
+        }
+
+        return $payment;
     }
 
     public function cancel(Layaway $layaway): Layaway
@@ -234,7 +247,7 @@ class LayawayService
      */
     public function liquidate(Layaway $layaway, array $payload, User $user): Sale
     {
-        return DB::transaction(function () use ($layaway, $payload, $user) {
+        $sale = DB::transaction(function () use ($layaway, $payload, $user) {
             /** @var Layaway $locked */
             $locked = Layaway::query()
                 ->lockForUpdate()
@@ -410,6 +423,10 @@ class LayawayService
 
             return $sale->fresh(['items', 'payments', 'customer', 'creator']);
         });
+
+        $this->notificationService->notifySale($sale, $user);
+
+        return $sale;
     }
 
     private function addPaymentInternal(Layaway $layaway, array $payload): LayawayPayment

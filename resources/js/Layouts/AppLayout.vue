@@ -45,6 +45,7 @@ const icons = {
     cashcuts:     { viewBox: '0 0 24 24', paths: ['M12 1v22', 'M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6'] },
     settings:     { viewBox: '0 0 24 24', paths: ['M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z', 'M19.4 15a7.97 7.97 0 0 0 .1-1 7.97 7.97 0 0 0-.1-1l2.1-1.6-2-3.4-2.5 1a8.2 8.2 0 0 0-1.7-1L15 3h-6l-.4 3a8.2 8.2 0 0 0-1.7 1l-2.5-1-2 3.4L4.6 13a7.97 7.97 0 0 0-.1 1c0 .34.03.67.1 1L2.5 16.6l2 3.4 2.5-1a8.2 8.2 0 0 0 1.7 1l.4 3h6l.4-3a8.2 8.2 0 0 0 1.7-1l2.5 1 2-3.4L19.4 15Z'] },
     users:        { viewBox: '0 0 24 24', paths: ['M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8', 'M23 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'] },
+    notifications: { viewBox: '0 0 24 24', paths: ['M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9', 'M13.73 21a2 2 0 0 1-3.46 0'] },
 };
 
 const navItems = computed(() => [
@@ -134,6 +135,14 @@ const navItems = computed(() => [
         permission: 'settings.manage',
         show: isManager.value,
         active: route().current('settings.*') || page.url.startsWith('/settings'),
+    },
+    {
+        key: 'notifications',
+        label: 'Notificaciones',
+        href: route('notifications.index'),
+        permission: null,
+        show: isManager.value,
+        active: page.url.startsWith('/notifications'),
     },
 ]);
 
