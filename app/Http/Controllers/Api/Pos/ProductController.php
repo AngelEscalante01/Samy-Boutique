@@ -37,7 +37,7 @@ class ProductController extends ApiController
         $categoryId = isset($validated['category_id']) ? (int) $validated['category_id'] : null;
         $updatedAfterRaw = $validated['updated_after'] ?? $validated['updated_since'] ?? null;
         $updatedAfter = $updatedAfterRaw !== null
-            ? Carbon::parse((string) $updatedAfterRaw)
+            ? Carbon::parse((string) $updatedAfterRaw)->setTimezone(config('app.timezone'))
             : null;
         $includeInactive = (bool) ($validated['include_inactive'] ?? false);
         $includeDeleted = (bool) ($validated['include_deleted'] ?? false);
@@ -58,13 +58,21 @@ class ProductController extends ApiController
             ->when($gender !== null, fn ($q) => $q->where('gender', $gender))
             ->when($categoryId !== null, fn ($q) => $q->where('category_id', $categoryId))
             ->when($updatedAfter !== null, function ($query) use ($updatedAfter) {
-                $query->where(function ($syncQuery) use ($updatedAfter) {
+                $updatedAfterSql = $updatedAfter->toDateTimeString();
+
+                $query->where(function ($syncQuery) use ($updatedAfterSql) {
                     $syncQuery
-                        ->whereRaw('COALESCE(products.updated_at, products.created_at) > ?', [$updatedAfter])
+                        ->whereRaw('COALESCE(products.updated_at, products.created_at) > ?', [$updatedAfterSql])
                         ->orWhereHas('variants', fn ($variantQuery) => $variantQuery
-                            ->whereRaw('COALESCE(updated_at, created_at) > ?', [$updatedAfter]))
+                            ->whereRaw('COALESCE(updated_at, created_at) > ?', [$updatedAfterSql]))
+                        ->orWhereHas('category', fn ($categoryQuery) => $categoryQuery
+                            ->whereRaw('COALESCE(updated_at, created_at) > ?', [$updatedAfterSql]))
+                        ->orWhereHas('variants.size', fn ($sizeQuery) => $sizeQuery
+                            ->whereRaw('COALESCE(updated_at, created_at) > ?', [$updatedAfterSql]))
+                        ->orWhereHas('variants.color', fn ($colorQuery) => $colorQuery
+                            ->whereRaw('COALESCE(updated_at, created_at) > ?', [$updatedAfterSql]))
                         ->orWhereHas('images', fn ($imageQuery) => $imageQuery
-                            ->whereRaw('COALESCE(updated_at, created_at, deleted_at) > ?', [$updatedAfter]));
+                            ->whereRaw('COALESCE(updated_at, created_at, deleted_at) > ?', [$updatedAfterSql]));
                 });
             })
             ->when($search !== '', function ($query) use ($search) {
@@ -79,12 +87,12 @@ class ProductController extends ApiController
                 });
             })
             ->with([
-                'category:id,name,active',
+                'category:id,name,active,created_at,updated_at',
                 'images:id,product_id,path,sort,created_at,updated_at,deleted_at',
                 'variants' => function ($query) use ($includeInactive) {
                     $query
                         ->select('id', 'product_id', 'size_id', 'color_id', 'sku', 'sale_price', 'stock', 'active', 'created_at', 'updated_at')
-                        ->with(['size:id,name', 'color:id,name,hex'])
+                        ->with(['size:id,name,created_at,updated_at', 'color:id,name,hex,created_at,updated_at'])
                         ->orderByDesc('stock')
                         ->orderBy('id');
 
@@ -166,13 +174,13 @@ class ProductController extends ApiController
             ->where('status', 'disponible')
             ->tap(fn ($query) => $inventoryService->scopeSellableProducts($query))
             ->with([
-                'category:id,name',
+                'category:id,name,created_at,updated_at',
                 'images:id,product_id,path,sort,created_at,updated_at,deleted_at',
                 'variants' => fn ($query) => $query
                     ->select('id', 'product_id', 'size_id', 'color_id', 'sku', 'sale_price', 'stock', 'active', 'created_at', 'updated_at')
                     ->where('active', true)
                     ->where('stock', '>', 0)
-                    ->with(['size:id,name', 'color:id,name,hex'])
+                    ->with(['size:id,name,created_at,updated_at', 'color:id,name,hex,created_at,updated_at'])
                     ->orderByDesc('stock')
                     ->orderBy('id'),
             ])

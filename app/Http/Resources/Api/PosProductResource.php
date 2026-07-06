@@ -75,6 +75,18 @@ class PosProductResource extends JsonResource
                 ->filter()
                 ->max()
             : null;
+        $latestVariantCatalogUpdate = $allVariants->isNotEmpty()
+            ? $allVariants
+                ->flatMap(fn ($variant) => [
+                    $variant->size?->updated_at ?? $variant->size?->created_at,
+                    $variant->color?->updated_at ?? $variant->color?->created_at,
+                ])
+                ->filter()
+                ->max()
+            : null;
+        $categoryUpdatedAt = $this->category
+            ? ($this->category->updated_at ?? $this->category->created_at)
+            : null;
         $latestImageUpdate = $this->relationLoaded('images')
             ? $this->images
                 ->map(fn ($image) => $image->updated_at ?? $image->created_at)
@@ -87,6 +99,8 @@ class PosProductResource extends JsonResource
         $syncUpdatedAt = collect([
             $productUpdatedAt,
             $latestVariantUpdate,
+            $latestVariantCatalogUpdate,
+            $categoryUpdatedAt,
             $latestImageUpdate,
             $latestImageDeletion,
         ])->filter()->max();
