@@ -7,6 +7,7 @@ use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use App\Models\Setting;
 
 class ImagesCleanupSoldCommand extends Command
 {
@@ -16,8 +17,8 @@ class ImagesCleanupSoldCommand extends Command
 
     public function handle(): int
     {
-        $days = 15;
-        $mode = 'soft';
+        $days = (int) Setting::get('sales.delete_images_after_days', 15);
+        $mode = Setting::get('sales.delete_images_mode', 'soft') === 'hard' ? 'hard' : 'soft';
 
         $cutoff = now()->subDays($days);
         $disk = Storage::disk('public');
@@ -31,8 +32,14 @@ class ImagesCleanupSoldCommand extends Command
         ProductImage::query()
             ->whereNull('deleted_at')
             ->whereHas('product', function (Builder $query) use ($cutoff) {
-                $query->whereNotNull('sold_out_at')
-                    ->where('sold_out_at', '<=', $cutoff);
+                $query->where(function (Builder $dateQuery) use ($cutoff) {
+                    $dateQuery->where(function (Builder $soldOutQuery) use ($cutoff) {
+                        $soldOutQuery->whereNotNull('sold_out_at')->where('sold_out_at', '<=', $cutoff);
+                    })->orWhere(function (Builder $soldQuery) use ($cutoff) {
+                        // Legacy single-variant products used sold_at before sold_out_at was introduced.
+                        $soldQuery->whereNull('sold_out_at')->where('status', 'vendido')->where('sold_at', '<=', $cutoff);
+                    });
+                });
             })
             ->with(['product:id'])
             ->orderBy('id')

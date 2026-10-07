@@ -20,6 +20,7 @@ class Sale extends Model
         'loyalty_discount_total',
         'loyalty_applied',
         'total',
+        'cash_received',
         'global_discount_type',
         'global_discount_value',
         'coupon_code',
@@ -41,6 +42,7 @@ class Sale extends Model
         'loyalty_discount_total' => 'decimal:2',
         'loyalty_applied' => 'boolean',
         'total' => 'decimal:2',
+        'cash_received' => 'decimal:2',
         'global_discount_value' => 'decimal:2',
         'canceled_at' => 'datetime',
     ];

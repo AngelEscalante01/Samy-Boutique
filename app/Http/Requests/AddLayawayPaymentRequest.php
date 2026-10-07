@@ -17,6 +17,8 @@ class AddLayawayPaymentRequest extends FormRequest
             'method' => ['required', 'string', 'in:cash,card,transfer,other'],
             'amount' => ['required', 'numeric', 'min:0.01'],
             'reference' => ['nullable', 'string', 'max:120'],
+            'observacion' => ['nullable', 'string', 'max:500'],
+            'auto_liquidate' => ['sometimes', 'boolean'],
         ];
     }
 }

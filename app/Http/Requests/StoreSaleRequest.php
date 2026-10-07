@@ -35,6 +35,7 @@ class StoreSaleRequest extends FormRequest
             'payments.*.method' => ['required', 'string', 'in:cash,card,transfer,other'],
             'payments.*.amount' => ['required', 'numeric', 'min:0.01'],
             'payments.*.reference' => ['nullable', 'string', 'max:120'],
+            'dinero_recibido' => ['nullable', 'numeric', 'min:0'],
         ];
     }
 }

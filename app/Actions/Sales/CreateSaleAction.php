@@ -254,6 +254,13 @@ class CreateSaleAction
                 ]);
             }
 
+            $cashReceived = round((float) Arr::get($payload, 'dinero_recibido', $paymentsSum), 2);
+            if ($cashReceived + 1e-9 < round($total, 2)) {
+                throw ValidationException::withMessages([
+                    'dinero_recibido' => ['El dinero recibido no puede ser menor al total de la venta.'],
+                ]);
+            }
+
             $sale = Sale::create([
                 'customer_id' => $customerId,
                 'created_by' => $createdByUserId,
@@ -263,6 +270,7 @@ class CreateSaleAction
                 'loyalty_discount_total' => $loyaltyDiscountTotal,
                 'loyalty_applied' => $loyaltyApplied,
                 'total' => number_format($total, 2, '.', ''),
+                'cash_received' => number_format($cashReceived, 2, '.', ''),
                 'global_discount_type' => $globalDiscountType,
                 'global_discount_value' => $globalDiscountValue,
                 'coupon_code' => $coupon ? $coupon->code : null,
