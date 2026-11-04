@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -33,9 +34,17 @@ class HandleInertiaRequests extends Middleware
 
         return [
             ...parent::share($request),
+            'storefront' => [
+                'publicUrl' => config('storefront.public_url'),
+                'systemUrl' => config('storefront.system_url'),
+            ],
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),
                 'error'   => fn () => $request->session()->get('error'),
+                'print_sale_id' => fn () => $request->session()->get('print_sale_id'),
+                'print_layaway_id' => fn () => $request->session()->get('print_layaway_id'),
+                'print_layaway_payment_id' => fn () => $request->session()->get('print_layaway_payment_id'),
+                'print_layaway_closed_id' => fn () => $request->session()->get('print_layaway_closed_id'),
             ],
             'auth' => [
                 'user' => $user
@@ -51,7 +60,10 @@ class HandleInertiaRequests extends Middleware
             ],
             // Ejemplo simple y explícito: permisos que usamos en el frontend.
             // (Evita exponer todos los permisos y mantiene bajo el costo.)
-            'logoUrl' => asset('logo-source.png'),
+            'logoUrl' => config('media.brand_logo_disk') === 'r2_public'
+                && preg_match('~\Asamy/brand/logo/[a-f0-9]{64}\.png\z~', (string) config('media.brand_logo_path'))
+                    ? Storage::disk('r2_public')->url(config('media.brand_logo_path'))
+                    : asset('logo-source.png'),
             'permissions' => [
                 'pos.view' => $user?->can('pos.view') ?? false,
 

@@ -10,12 +10,17 @@ class Customer extends Model
 {
     use HasFactory;
 
+    protected $hidden = ['photo_disk', 'photo_path', 'photo_generation'];
+
     protected $fillable = [
         'name',
         'email',
         'phone',
         'active',
         'purchases_count',
+        'photo_disk',
+        'photo_path',
+        'photo_generation',
     ];
 
     protected $casts = [

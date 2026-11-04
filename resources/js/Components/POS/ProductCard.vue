@@ -58,7 +58,7 @@ function selectProduct() {
 
 <template>
     <div
-        class="group relative flex flex-col overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-100 transition-shadow hover:shadow-md"
+        class="group relative flex flex-col overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-100 transition-shadow hover:shadow-md app-surface"
         :class="isAnyVariantInCart ? 'ring-gray-900 ring-2' : ''"
     >
         <!-- Badge "En carrito" -->

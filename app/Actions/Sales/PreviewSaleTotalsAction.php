@@ -24,6 +24,8 @@ class PreviewSaleTotalsAction
      */
     public function execute(array $payload, User $user): array
     {
+        AssertGlobalDiscountQuantity::validate($payload);
+
         $itemsPayload = Arr::get($payload, 'items', []);
 
         $variantIds = collect($itemsPayload)
@@ -130,7 +132,9 @@ class PreviewSaleTotalsAction
             }
 
             if ($coupon->max_redemptions !== null) {
-                $used = CouponRedemption::where('coupon_id', $coupon->id)->count();
+                $used = CouponRedemption::where('coupon_id', $coupon->id)
+                    ->whereHas('sale', fn ($query) => $query->where('status', 'completed'))
+                    ->count();
                 if ($used >= $coupon->max_redemptions) {
                     throw ValidationException::withMessages([
                         'coupon_code' => ['El cupón alcanzó su límite de uso.'],
@@ -143,6 +147,7 @@ class PreviewSaleTotalsAction
             if ($customerId && $coupon->max_redemptions_per_customer !== null) {
                 $usedByCustomer = CouponRedemption::where('coupon_id', $coupon->id)
                     ->where('customer_id', $customerId)
+                    ->whereHas('sale', fn ($query) => $query->where('status', 'completed'))
                     ->count();
 
                 if ($usedByCustomer >= $coupon->max_redemptions_per_customer) {

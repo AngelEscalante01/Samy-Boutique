@@ -1,9 +1,11 @@
 <script setup>
-import { Head, Link } from '@inertiajs/vue3'
+import { Link } from '@inertiajs/vue3'
+import PublicSeoHead from '@/Components/PublicSeoHead.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = defineProps({
   product: { type: Object, required: true },
+  seo: { type: Object, required: true },
   whatsappNumber: { type: String, default: '' },
 })
 
@@ -80,7 +82,6 @@ const displayPrice = computed(() => {
 const stockText = computed(() => {
   const stock = Number(selectedVariant.value?.stock ?? 0)
   if (!stock) return 'Sin stock disponible'
-  if (stock <= 3) return `Últimas piezas (${stock})`
   return `Stock disponible: ${stock}`
 })
 
@@ -106,8 +107,14 @@ watch([selectedColorId, sizeOptions], () => {
   }
 }, { immediate: true })
 
+watch(selectedVariant, (variant) => {
+  if (!variant) return
+  const index = images.value.findIndex((image) => (image.variant_ids ?? [image.product_variant_id]).some(id => Number(id) === Number(variant.id)))
+  if (index >= 0) currentImage.value = index
+})
+
 function imageUrl(image) {
-  return image?.image_url ?? image?.url ?? (image?.path ? `/storage/${image.path}` : null)
+  return image?.optimized_url ?? image?.image_url ?? image?.url ?? (image?.path ? `/storage/${image.path}` : null)
 }
 
 function setPlaceholder(event) {
@@ -151,7 +158,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <Head :title="`${product.name} — Samy Boutique`" />
+  <PublicSeoHead :seo="seo" />
 
   <div class="min-h-screen bg-stone-50">
     <nav class="border-b border-stone-200 bg-white px-4 py-4 sm:px-6">
@@ -165,7 +172,9 @@ onBeforeUnmount(() => {
           </svg>
           Catálogo
         </Link>
-        <span class="text-sm font-semibold tracking-widest text-zinc-900">Samy Boutique</span>
+        <Link :href="route('public.catalog.index')" class="flex h-12 w-16 items-center justify-center overflow-hidden" aria-label="Samy Boutique, volver al catálogo">
+          <img :src="$page.props.logoUrl" alt="" class="h-16 w-16 max-w-none object-contain" @error="(event) => { event.target.onerror = null; event.target.src = '/logo-source.png' }">
+        </Link>
       </div>
     </nav>
 

@@ -23,13 +23,13 @@ function submit() {
 <template>
     <Head title="Configuración" />
 
-    <div class="mx-auto max-w-4xl space-y-6">
-        <div>
+    <div class="mx-auto max-w-4xl space-y-6 app-card-stack app-page">
+        <div class="app-heading">
             <h1 class="text-lg font-semibold text-gray-900">Configuración</h1>
             <p class="text-sm text-gray-500">Ajustes generales del sistema</p>
         </div>
 
-        <div class="rounded-lg bg-white p-6 shadow">
+        <div class="rounded-lg bg-white p-6 shadow app-surface">
             <h2 class="text-sm font-semibold text-gray-900">Fidelidad (5ta compra)</h2>
 
             <form class="mt-4 space-y-4" @submit.prevent="submit">

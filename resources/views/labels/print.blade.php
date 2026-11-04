@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lote de etiquetas #{{ $job->id }} · Samy</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#eee;font:14px system-ui,sans-serif;color:#000}.toolbar{max-width:850px;margin:24px auto;background:white;padding:24px;border-radius:12px}.toolbar p{line-height:1.5}button{padding:12px 20px;border:0;border-radius:8px;background:#252335;color:white;font:inherit;cursor:pointer}a{color:#35335e}.label{width:{{ $job->width_mm }}mm;height:{{ $job->height_mm }}mm;padding:2mm;margin:15px auto;background:white;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;border:1px solid #ddd}.name,.variant{font-size:8pt;line-height:3.5mm;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.name{font-weight:700}.variant{font-size:7pt}.sku{font:7pt monospace;line-height:3.5mm;white-space:nowrap}.price{font-size:9pt;font-weight:700;line-height:4mm}.barcode{height:10mm;flex-shrink:0;background:white}.barcode svg{width:100%;height:10mm;display:block;shape-rendering:crispEdges}
+@page{size:{{ $job->width_mm }}mm {{ $job->height_mm }}mm;margin:0}
+@media print{body{background:white}.toolbar{display:none}.label{margin:0;border:0;break-after:page;page-break-after:always}.label:last-child{break-after:auto;page-break-after:auto}}
+</style></head><body>
+@php($labelCount = collect($labels)->sum('copies'))
+<div class="toolbar"><a href="{{ request()->integer('product') > 0 ? route('products.edit', request()->integer('product')) : route('product-labels.index') }}">{{ request()->integer('product') > 0 ? '← Volver al producto' : '← Etiquetas' }}</a><h1>Lote #{{ $job->id }}</h1><p>{{ $job->width_mm }} × {{ $job->height_mm }} mm · {{ $labelCount }} {{ $labelCount === 1 ? 'etiqueta' : 'etiquetas' }}. Selecciona este tamaño en el controlador, escala 100 %, sin márgenes ni encabezados. Usa papel de etiquetas y calibra el espacio entre etiquetas.</p><button type="button" id="print-labels">Imprimir o guardar PDF</button><p id="print-state" role="status">Vista preparada. El navegador no confirma la impresión física.</p><p>Reimprimir este lote no crea ventas ni códigos. El precio guardado puede diferir del precio actual del catálogo.</p></div>
+@foreach($labels as $label)
+@for($copy = 0; $copy < $label['copies']; $copy++)
+<article class="label" aria-label="Etiqueta {{ $label['sku'] }}"><div class="name" title="{{ $label['name'] }}">{{ $label['name'] }}</div><div class="variant" title="{{ $label['variant'] }}">{{ $label['variant'] }}</div><div class="barcode" style="width:{{ $label['barcode']['width_mm'] + 2 * $label['barcode']['quiet_mm'] }}mm;padding:0 {{ $label['barcode']['quiet_mm'] }}mm">{!! $label['barcode']['svg'] !!}</div><div class="sku">{{ $label['sku'] }}</div>@if($job->show_price)<div class="price">${{ number_format((float)$label['price'], 2) }}</div>@endif</article>
+@endfor
+@endforeach
+<script>document.getElementById('print-labels').addEventListener('click',()=>{document.getElementById('print-state').textContent='Diálogo solicitado. Verifica las etiquetas físicas antes de reimprimir.';window.print()});@if(request()->boolean('autoprint'))window.addEventListener('load',()=>window.print());@endif</script>
+</body></html>

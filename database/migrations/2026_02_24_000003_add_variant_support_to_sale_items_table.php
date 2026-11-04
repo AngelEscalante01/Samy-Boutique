@@ -34,9 +34,12 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('sale_items', function (Blueprint $table) {
+            $table->dropForeign(['product_variant_id']);
+        });
+
+        Schema::table('sale_items', function (Blueprint $table) {
             $table->dropIndex(['product_variant_id']);
-            $table->dropConstrainedForeignId('product_variant_id');
-            $table->dropColumn(['qty', 'discount', 'final_price']);
+            $table->dropColumn(['product_variant_id', 'qty', 'discount', 'final_price']);
         });
     }
 };

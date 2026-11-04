@@ -1,0 +1,24 @@
+name: samy-media-migration
+services:
+  cli:
+    image: samy-release-app:${SAMY_RELEASE_TAG:-20261101}
+    user: ${SAMY_MIGRATION_UID:?operator uid required}:${SAMY_MIGRATION_GID:?operator gid required}
+    working_dir: /app
+    env_file: .env.migration.private
+    entrypoint: [sh, -c, 'mkdir -p storage/logs storage/framework/cache/data storage/framework/sessions storage/framework/views; exec "$$@"', '--']
+    read_only: true
+    tmpfs: [/tmp, '/app/storage:mode=1777', '/app/bootstrap/cache:mode=1777']
+    volumes:
+      - ${SAMY_MIGRATION_SOURCE_PUBLIC:?frozen source required}:/app/storage/app/public:ro
+      - ${SAMY_MIGRATION_SOURCE_BACKUP:?source backup required}:/migration/source.sql.gz:ro
+      - ${SAMY_MIGRATION_APPROVAL_FILE:?private manifest required}:/migration/approval.json:ro
+    networks: [database, egress]
+    labels: {traefik.enable: 'false'}
+    mem_limit: 512m
+networks:
+  database:
+    external: true
+    name: ${SAMY_MIGRATION_DB_NETWORK:-samy-release_application}
+  egress:
+    external: true
+    name: ${SAMY_MIGRATION_EGRESS_NETWORK:-samy-release_egress}

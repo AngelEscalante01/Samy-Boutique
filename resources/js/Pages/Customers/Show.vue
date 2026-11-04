@@ -25,9 +25,9 @@ const layawayStatusClass  = { open: 'bg-amber-100 text-amber-700', liquidated: '
 <template>
   <Head :title="customer.name ?? 'Cliente'" />
 
-  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6 app-card-stack app-page">
     <!-- Header -->
-    <div class="flex flex-wrap items-start justify-between gap-4">
+    <div class="flex flex-wrap items-start justify-between gap-4 app-heading">
       <div class="flex items-center gap-3">
         <Link :href="route('customers.index')" class="text-gray-400 hover:text-gray-600 transition">
           <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -36,7 +36,8 @@ const layawayStatusClass  = { open: 'bg-amber-100 text-amber-700', liquidated: '
         </Link>
         <div class="flex items-center gap-3">
           <div class="h-12 w-12 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-            <span class="text-lg font-bold text-gray-600">{{ customer.name?.charAt(0)?.toUpperCase() ?? '?' }}</span>
+            <img v-if="customer.photo_url" :src="customer.photo_url" :alt="`Foto de ${customer.name}`" class="h-12 w-12 rounded-full object-cover">
+            <span v-else class="text-lg font-bold text-gray-600">{{ customer.name?.charAt(0)?.toUpperCase() ?? '?' }}</span>
           </div>
           <div>
             <div class="flex items-center gap-2 flex-wrap">
@@ -61,37 +62,37 @@ const layawayStatusClass  = { open: 'bg-amber-100 text-amber-700', liquidated: '
     </div>
 
     <!-- Flash -->
-    <div v-if="flash.success" class="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-800 flex items-center gap-2">
+    <div v-if="flash.success" class="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-800 flex items-center gap-2 app-surface">
       <svg class="h-4 w-4 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
       {{ flash.success }}
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 app-card-grid">
       <!-- Left column -->
-      <div class="space-y-6">
-        <div class="grid grid-cols-2 gap-3 lg:grid-cols-1">
-          <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+      <div class="space-y-6 app-card-stack">
+        <div class="grid grid-cols-2 gap-3 lg:grid-cols-1 app-card-grid">
+          <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 app-surface">
             <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Compras totales</p>
             <p class="mt-1 text-3xl font-bold text-gray-900">{{ customer.purchases_count }}</p>
           </div>
-          <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+          <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 app-surface">
             <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Total gastado</p>
             <p class="mt-1 text-2xl font-bold text-emerald-600">${{ money(stats.total_spent) }}</p>
           </div>
-          <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 col-span-2 lg:col-span-1">
+          <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 col-span-2 lg:col-span-1 app-surface">
             <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Ultima compra</p>
             <p class="mt-1 text-base font-semibold text-gray-700">{{ fmtDate(stats.last_sale) }}</p>
           </div>
         </div>
-        <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+        <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 app-surface">
           <LoyaltyBadge :count="customer.purchases_count" size="md" />
         </div>
       </div>
 
       <!-- Right column -->
-      <div class="lg:col-span-2 space-y-6">
+      <div class="lg:col-span-2 space-y-6 app-card-stack">
         <!-- Ultimas ventas -->
-        <div class="rounded-xl bg-white shadow-sm ring-1 ring-gray-100 overflow-hidden">
+        <div class="rounded-xl bg-white shadow-sm ring-1 ring-gray-100 overflow-hidden app-surface">
           <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-gray-700">Ultimas ventas</h2>
             <span class="text-xs text-gray-400">Ultimas {{ recentSales.length }}</span>
@@ -123,7 +124,7 @@ const layawayStatusClass  = { open: 'bg-amber-100 text-amber-700', liquidated: '
         </div>
 
         <!-- Ultimos apartados -->
-        <div class="rounded-xl bg-white shadow-sm ring-1 ring-gray-100 overflow-hidden">
+        <div class="rounded-xl bg-white shadow-sm ring-1 ring-gray-100 overflow-hidden app-surface">
           <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
             <h2 class="text-sm font-semibold text-gray-700">Ultimos apartados</h2>
             <span class="text-xs text-gray-400">Ultimos {{ recentLayaways.length }}</span>

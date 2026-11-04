@@ -1,0 +1,605 @@
+{
+  "completed_at": "2026-11-01T23:18:45.257941+00:00",
+  "status": "ready_for_authorized_cutover",
+  "public_cutover_executed": false,
+  "domains": {
+    "catalog": "https://samyboutique.com.mx",
+    "system": "https://sistema.samyboutique.com.mx",
+    "android_api": "https://sistema.samyboutique.com.mx/api",
+    "public_images": "https://imagenes.samyboutique.com.mx"
+  },
+  "preexisting_vps_containers_running": 28,
+  "production_containers_started": 0,
+  "web_tests": {
+    "php": "8.2.28",
+    "passed": 196,
+    "skipped": 3,
+    "assertions": 1978,
+    "network": "none"
+  },
+  "real_http": {
+    "checks": [
+      {
+        "check": "GET /api/products status 401",
+        "passed": true
+      },
+      {
+        "check": "POST /api/login status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/me status 200",
+        "passed": true
+      },
+      {
+        "check": "gerente role",
+        "passed": true
+      },
+      {
+        "check": "POST /api/login status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/me status 200",
+        "passed": true
+      },
+      {
+        "check": "cajero role",
+        "passed": true
+      },
+      {
+        "check": "GET /api/capabilities status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/products status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/customers status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/products status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/customers status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/sales status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/layaways status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/product-labels status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/users status 403",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/users status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/settings status 403",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/settings status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/reports status 403",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/reports status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/dashboard status 403",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/dashboard status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/catalogs/categories status 403",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/catalogs/categories status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/products/create status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/products/1/edit status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/products/1 status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/customers/create status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/catalog-slides status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/coupons status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/notifications/email-settings status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/cash-cuts status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/products?q=QVP-000002 status 200",
+        "passed": true
+      },
+      {
+        "check": "variant scan gives one parent",
+        "passed": true
+      },
+      {
+        "check": "POST /api/mobile/customers status 200",
+        "passed": true
+      },
+      {
+        "check": "POST /api/mobile/customers status 200",
+        "passed": true
+      },
+      {
+        "check": "customer replay identical",
+        "passed": true
+      },
+      {
+        "check": "POST /api/sales status 201",
+        "passed": true
+      },
+      {
+        "check": "POST /api/sales status 201",
+        "passed": true
+      },
+      {
+        "check": "sale replay identical",
+        "passed": true
+      },
+      {
+        "check": "sale total",
+        "passed": true
+      },
+      {
+        "check": "POST /api/sales status 409",
+        "passed": true
+      },
+      {
+        "check": "GET /api/sales/1/ticket status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/sales/1 status 200",
+        "passed": true
+      },
+      {
+        "check": "POST /api/layaways status 201",
+        "passed": true
+      },
+      {
+        "check": "POST /api/layaways status 201",
+        "passed": true
+      },
+      {
+        "check": "layaway replay identical",
+        "passed": true
+      },
+      {
+        "check": "layaway initial balance",
+        "passed": true
+      },
+      {
+        "check": "POST /api/layaways/1/payments status 201",
+        "passed": true
+      },
+      {
+        "check": "POST /api/layaways/1/payments status 201",
+        "passed": true
+      },
+      {
+        "check": "payment replay identical",
+        "passed": true
+      },
+      {
+        "check": "layaway final balance",
+        "passed": true
+      },
+      {
+        "check": "GET /api/mobile/layaways/1 status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/reports?from=2026-11-01&to=2026-11-01 status 200",
+        "passed": true
+      },
+      {
+        "check": "POST /api/cash-cuts/preview status 200",
+        "passed": true
+      },
+      {
+        "check": "web login csrf present",
+        "passed": true
+      },
+      {
+        "check": "web login redirects dashboard",
+        "passed": true
+      },
+      {
+        "check": "web /dashboard",
+        "passed": true
+      },
+      {
+        "check": "web /pos",
+        "passed": true
+      },
+      {
+        "check": "web /products",
+        "passed": true
+      },
+      {
+        "check": "web /products/create",
+        "passed": true
+      },
+      {
+        "check": "web /products/1/edit",
+        "passed": true
+      },
+      {
+        "check": "web /products/bulk",
+        "passed": true
+      },
+      {
+        "check": "web /customers",
+        "passed": true
+      },
+      {
+        "check": "web /sales",
+        "passed": true
+      },
+      {
+        "check": "web /layaways",
+        "passed": true
+      },
+      {
+        "check": "web /layaways/create",
+        "passed": true
+      },
+      {
+        "check": "web /reports",
+        "passed": true
+      },
+      {
+        "check": "web /cash-cuts",
+        "passed": true
+      },
+      {
+        "check": "web /users",
+        "passed": true
+      },
+      {
+        "check": "web /settings",
+        "passed": true
+      },
+      {
+        "check": "GET /api/products status 200",
+        "passed": true
+      },
+      {
+        "check": "sale and layaway stock each decremented once",
+        "passed": true
+      },
+      {
+        "check": "POST /api/logout status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/me status 401",
+        "passed": true
+      },
+      {
+        "check": "POST /api/logout status 200",
+        "passed": true
+      },
+      {
+        "check": "GET /api/me status 401",
+        "passed": true
+      }
+    ],
+    "passed": 78,
+    "failed": 0,
+    "synthetic_only": true
+  },
+  "domains_private_host_checks": {
+    "passed": 11,
+    "failed": 0,
+    "synthetic_only": true,
+    "public_dns_changed": false,
+    "checks": [
+      {
+        "check": "public root opens catalog",
+        "passed": true
+      },
+      {
+        "check": "public canonical HTTPS root",
+        "passed": true
+      },
+      {
+        "check": "legacy catalog path preserves query",
+        "passed": true
+      },
+      {
+        "check": "www canonical redirect",
+        "passed": true
+      },
+      {
+        "check": "public login goes to system",
+        "passed": true
+      },
+      {
+        "check": "public API is not exposed",
+        "passed": true
+      },
+      {
+        "check": "system root opens login",
+        "passed": true
+      },
+      {
+        "check": "system login is not indexed",
+        "passed": true
+      },
+      {
+        "check": "system catalog goes to public host",
+        "passed": true
+      },
+      {
+        "check": "public robots points to sitemap",
+        "passed": true
+      },
+      {
+        "check": "sitemap contains only public URLs",
+        "passed": true
+      }
+    ]
+  },
+  "android": {
+    "native_flutter": true,
+    "application_id": "mx.com.samyboutique.app",
+    "version": "1.0.0",
+    "version_code": 2026110101,
+    "tests_passed": 137,
+    "signed_apk_and_aab_verified": true,
+    "production_apk_installed_and_opened_on_tablet": true,
+    "production_login_and_push_require_public_https": true
+  },
+  "source_rehearsal": {
+    "backup_sha256": "11de666ee00019f5ddd9d5b7b2dc0d07d5836fadb440657eb768c077c5125117",
+    "original_tables": 42,
+    "numeric_columns": 151,
+    "converted_myisam_tables": [
+      "notification_emails",
+      "notification_devices",
+      "personal_access_tokens",
+      "notification_deliveries",
+      "notification_delivery_attempts",
+      "notification_dispatches",
+      "notification_preferences",
+      "system_notifications",
+      "notification_announcements",
+      "notification_inventory_states"
+    ],
+    "changed_row_counts": [],
+    "changed_numeric_sums": [],
+    "changed_original_values": [],
+    "application_connected": false,
+    "workers_started": false,
+    "outbound_network": false
+  },
+  "media": {
+    "original_tables_compared": 41,
+    "unexpected_changed_tables": [],
+    "owner_timestamps_refreshed_for_image_sync": 517,
+    "active_images": 790,
+    "verified_r2_images": 790,
+    "unmigrated_active_images": 0,
+    "derivatives": 1580,
+    "web_application_connected": false,
+    "workers_started": false
+  },
+  "public_cors": {
+    "client": "native Dart HttpClient",
+    "default_user_agent": "Dart/3.13 (dart:io)",
+    "all_origins_passed": true,
+    "checks": [
+      {
+        "origin": null,
+        "status": 200,
+        "bytes": 123,
+        "passed": true
+      },
+      {
+        "origin": "https://samyboutique.com.mx",
+        "status": 200,
+        "bytes": 123,
+        "passed": true
+      },
+      {
+        "origin": "https://www.samyboutique.com.mx",
+        "status": 200,
+        "bytes": 123,
+        "passed": true
+      },
+      {
+        "origin": "https://sistema.samyboutique.com.mx",
+        "status": 200,
+        "bytes": 123,
+        "passed": true
+      },
+      {
+        "origin": "http://127.0.0.1:18181",
+        "status": 200,
+        "bytes": 123,
+        "passed": true
+      },
+      {
+        "origin": "https://unrelated.samy.test",
+        "status": 200,
+        "bytes": 123,
+        "passed": true
+      }
+    ],
+    "certificate_validation_enabled": true,
+    "synthetic_only": true
+  },
+  "chrome_image_cache": {
+    "synthetic_only": true,
+    "real_prefetch_function": true,
+    "image_fetched_cached_and_recovered": true,
+    "bytes": 123
+  },
+  "r2": {
+    "public_sha256_verified": true,
+    "private_sha256_verified": true,
+    "private_signed_status": 200,
+    "private_unsigned_status": 400,
+    "public_https_status": 200,
+    "tls_validation_enabled": true
+  },
+  "smtp": {
+    "tls_verified": true,
+    "authentication_accepted": true,
+    "messages_sent": 0,
+    "sender": "notificaciones@samyboutique.com.mx"
+  },
+  "firebase": {
+    "project": "samy-boutique",
+    "validate_only": true,
+    "status": 200,
+    "messages_delivered": 0
+  },
+  "backup": {
+    "completed_at": "2026-11-01T23:15:07.264541+00:00",
+    "project": "samy-release",
+    "snapshot_id": "f33f184098be0c29c87d8dc2e725471dd4433b536c915ecdb626af7bfd4ccb0f",
+    "encrypted_offsite": true,
+    "repository_checked_with_read_data": true,
+    "restore_hashes_verified": true,
+    "synthetic_only": true,
+    "web_mutations_quiesced_during_capture": true,
+    "files_processed": 12,
+    "automatic_photo_deletions": false
+  },
+  "database_restore": {
+    "synthetic_only": true,
+    "tables_restored": 58,
+    "business_tables_compared": 51,
+    "business_rows_compared": 169,
+    "changed_business_tables": [],
+    "application_connected": false,
+    "workers_started": false
+  },
+  "interrupted_backup_recovery": {
+    "synthetic_only": true,
+    "interrupted_capture_recovery_passed": true,
+    "application_left_paused": false
+  },
+  "runtime_cutover_rehearsal": {
+    "synthetic_only": true,
+    "first_execution_passed": true,
+    "repeat_is_noop": true,
+    "new_job_untouched": true,
+    "old_device_inactive": true,
+    "new_device_active": true,
+    "financial_rows_unchanged": true,
+    "messages_sent": 0
+  },
+  "runtime_cutover_plan": {
+    "database": "samy_release_preview",
+    "synthetic_only": true,
+    "legacy_jobs_preserved": 6,
+    "payload_hashes_verified": true,
+    "historical_notifications_sent": 0,
+    "financial_tables_changed": false,
+    "inventory_notification_baseline_set": true,
+    "layaway_scan_min_id": 1
+  },
+  "entrypoint_guards": {
+    "checks": [
+      {
+        "check": "missing_cutover_approval",
+        "passed": true
+      },
+      {
+        "check": "backup_schema_forbidden",
+        "passed": true
+      }
+    ],
+    "public_routing_enabled": false,
+    "cutover_approved": false
+  },
+  "source_package": {
+    "files": 511,
+    "sha256": "cbe848df3f487b503d0f593483f12641baec91356505bea108d30c72c2d6f7e3"
+  },
+  "known_private_credentials_in_source_package": 0,
+  "temporary_ftps_account_revoked": true,
+  "automatic_photo_deletion_enabled": false,
+  "physical_hardware_pending": [
+    "client_ticket_printer"
+  ],
+  "remaining_deployment_actions": [
+    "freeze_source_and_capture_final_consistent_backup",
+    "restore_and_reconcile_final_snapshot",
+    "publish_dns_https_and_start_only_samy_production",
+    "verify_new_origin_login_and_push_with_authorized_manager"
+  ],
+  "backup_units": {
+    "samy-backup-production.timer": "disabled",
+    "samy-backup-recover.service": "disabled"
+  },
+  "backup_installed_script_matches_reviewed_source": true,
+  "release_tag": "20261101-r5",
+  "orientation_repair": {
+    "images_checked": 7,
+    "oriented_derivatives_verified": 14,
+    "originals_unchanged": true,
+    "old_objects_preserved": true,
+    "repeat_did_not_change_references": true,
+    "commercial_operations_created": 0
+  },
+  "automatic_push_worker": {
+    "synthetic_only": true,
+    "dedicated_worker_consumed_real_queue_job": true,
+    "real_fcm_attempts": 0,
+    "financial_rows_unchanged": true,
+    "cutover_preparation_blocks_active_push_worker": true,
+    "resumed_after_coordinated_backup": true
+  },
+  "scheduled_push_retry_without_another_event_test_passed": true
+}

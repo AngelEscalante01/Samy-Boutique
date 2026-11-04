@@ -1,11 +1,17 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { Head, Link, useForm } from '@inertiajs/vue3'
+import { Head, Link, useForm, usePage } from '@inertiajs/vue3'
+import { printLayawayCreated } from '@/services/printSale'
+import VariantSelectorModal from '@/Components/POS/VariantSelectorModal.vue'
 
 const props = defineProps({
   products:  { type: Array, required: true },
   customers: { type: Array, required: true },
+  discountPolicy: { type: Object, default: () => ({ canApply: false, canHigh: false, basicMaxPercent: 10, basicMaxAmount: 100 }) },
 })
+
+const page = usePage()
+const statusMessage = ref(null) // { type: 'success' | 'error' | 'warning', text: string }
 
 const productQuery = ref('')
 const filteredProducts = computed(() => {
@@ -20,13 +26,39 @@ const filteredProducts = computed(() => {
 
 const cart = ref([])
 const inCartIds = computed(() => new Set(cart.value.map(i => i.variant.id)))
-function firstVariantId(product) {
-  return (product.variants || []).find(v => Number(v.stock || 0) > 0)?.id ?? null
+const variantProduct = ref(null)
+const variantSelectorOpen = ref(false)
+function availableVariants(product) {
+  return (product.variants || []).filter(v => (v.active ?? true) && Number(v.stock ?? 0) > 0)
 }
+function allVariantsAdded(product) {
+  const variants = availableVariants(product)
+  return variants.length > 0 && variants.every(v => inCartIds.value.has(v.id))
+}
+function minimumPrice(product) {
+  const prices = availableVariants(product).map(v => Number(v.sale_price_effective ?? product.sale_price))
+  return prices.length ? Math.min(...prices) : Number(product.sale_price ?? 0)
+}
+const selectableProduct = computed(() => variantProduct.value ? {
+  ...variantProduct.value,
+  variants: availableVariants(variantProduct.value).filter(v => !inCartIds.value.has(v.id)),
+} : null)
 function addToCart(product) {
-  const variant = (product.variants || []).find(v => Number(v.stock || 0) > 0)
-  if (!variant) return
-  if (!inCartIds.value.has(variant.id)) cart.value.push({ product, variant, qty: 1 })
+  const variants = availableVariants(product).filter(v => !inCartIds.value.has(v.id))
+  if (!variants.length) return
+  if (variants.length === 1) {
+    cart.value.push({ product, variant: variants[0], qty: 1 })
+    return
+  }
+  variantProduct.value = product
+  variantSelectorOpen.value = true
+}
+function confirmVariant({ variant, qty }) {
+  if (!variantProduct.value || inCartIds.value.has(variant.id)) return
+  if (!Number.isInteger(qty) || qty < 1 || qty > Number(variant.stock ?? 0)) return
+  cart.value.push({ product: variantProduct.value, variant, qty })
+  variantSelectorOpen.value = false
+  variantProduct.value = null
 }
 function removeFromCart(variantId) { cart.value = cart.value.filter(i => i.variant.id !== variantId) }
 function incQty(variantId) {
@@ -39,7 +71,16 @@ function decQty(variantId) {
   if (!item || item.qty <= 1) return
   item.qty -= 1
 }
-const cartTotal = computed(() => cart.value.reduce((s, item) => s + (Number(item.variant.sale_price_effective || item.product.sale_price) * Number(item.qty || 1)), 0).toFixed(2))
+const cartTotal = computed(() => cart.value.reduce((s, item) => s + (Number(item.variant.sale_price_effective ?? item.product.sale_price) * Number(item.qty || 1)), 0).toFixed(2))
+const discountType = ref('')
+const discountValue = ref('')
+const totalUnits = computed(() => cart.value.reduce((sum, item) => sum + Number(item.qty || 0), 0))
+const discountAmount = computed(() => {
+  if (totalUnits.value < 2 || !discountType.value) return 0
+  const value = Math.max(0, Number(discountValue.value || 0))
+  return discountType.value === 'percent' ? Math.min(Number(cartTotal.value), Number(cartTotal.value) * Math.min(100, value) / 100) : Math.min(Number(cartTotal.value), value)
+})
+const discountedTotal = computed(() => (Number(cartTotal.value) - discountAmount.value).toFixed(2))
 
 const customerQuery = ref('')
 const selectedCustomer = ref(null)
@@ -53,20 +94,97 @@ const customerSuggestions = computed(() => {
 function selectCustomer(c) { selectedCustomer.value = c; customerQuery.value = c.name }
 function clearCustomer() { selectedCustomer.value = null; customerQuery.value = '' }
 
-const initialPaymentAmount = ref('')
-const initialPaymentMethod = ref('cash')
+const initialPayments = ref([{ method: 'cash', amount: '', reference: '', payer_name: '' }])
+const vigenciaOpciones = [7, 15, 30, 45, 60]
+const vigenciaSeleccion = ref('30')
+const vigenciaManual = ref('')
 
-const form = useForm({ customer_id: null, items: [], payments: [] })
+const vigenciaDias = computed(() => {
+  if (vigenciaSeleccion.value === 'manual') {
+    return Number(vigenciaManual.value || 0)
+  }
+
+  return Number(vigenciaSeleccion.value || 0)
+})
+
+const fechaApartadoPreview = computed(() => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return today
+})
+
+const fechaVencimientoPreview = computed(() => {
+  const dias = vigenciaDias.value
+  if (!Number.isInteger(dias) || dias <= 0) return null
+
+  const due = new Date()
+  due.setHours(0, 0, 0, 0)
+  due.setDate(due.getDate() + dias)
+  return due
+})
+
+const form = useForm({ customer_id: null, vigencia_dias: null, items: [], payments: [], global_discount_type: null, global_discount_value: null })
 
 function submit() {
+  statusMessage.value = null
+
+  if (!Number.isInteger(vigenciaDias.value) || vigenciaDias.value <= 0) {
+    statusMessage.value = {
+      type: 'error',
+      text: 'La vigencia debe ser un numero entero mayor a 0 dias.',
+    }
+    return
+  }
+
   form.customer_id = selectedCustomer.value?.id ?? null
+  form.vigencia_dias = vigenciaDias.value
   form.items = cart.value.map(item => ({ variant_id: item.variant.id, qty: Number(item.qty || 1) }))
-  const amt = parseFloat(initialPaymentAmount.value)
-  form.payments = (!isNaN(amt) && amt > 0) ? [{ method: initialPaymentMethod.value, amount: amt }] : []
-  form.post(route('layaways.store'))
+  form.global_discount_type = totalUnits.value >= 2 && discountType.value ? discountType.value : null
+  form.global_discount_value = form.global_discount_type ? Number(discountValue.value || 0) : null
+  form.payments = initialPayments.value.map(payment => ({ method: payment.method, amount: Number(payment.amount || 0), reference: payment.reference || null, payer_name: payment.payer_name || null })).filter(payment => payment.amount > 0)
+
+  form.post(route('layaways.store'), {
+    onError: () => {
+      statusMessage.value = {
+        type: 'error',
+        text: 'No se pudo guardar el apartado. Verifica los datos e intenta nuevamente.',
+      }
+    },
+    onSuccess: async (pageResponse) => {
+      const layawayId = pageResponse?.props?.flash?.print_layaway_id
+        ?? page.props?.flash?.print_layaway_id
+        ?? null
+
+      if (!layawayId) {
+        statusMessage.value = {
+          type: 'warning',
+          text: 'Apartado guardado, pero no se encontro el folio para imprimir automaticamente.',
+        }
+        return
+      }
+
+      const printResult = await printLayawayCreated(layawayId, { automatic: true })
+      if (printResult.ok) {
+        statusMessage.value = {
+          type: 'success',
+          text: printResult.mode === 'browser' ? 'Apartado guardado. Su comprobante está disponible en la ficha.' : 'Apartado guardado e impresion enviada correctamente.',
+        }
+        return
+      }
+
+      statusMessage.value = {
+        type: 'error',
+        text: `Apartado guardado, pero fallo la impresion: ${printResult.message}`,
+      }
+    },
+  })
 }
 
 function money(v) { return Number(v).toFixed(2) }
+function fmtDateShort(d) {
+  if (!d) return '—'
+  return d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' })
+}
 
 function storageBaseUrl() {
   if (typeof window === 'undefined') return '/storage/'
@@ -90,8 +208,8 @@ function variantLabel(variant) {
 <template>
   <Head title="Nuevo apartado" />
 
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <div class="flex items-center gap-3 mb-6">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 app-page">
+    <div class="flex items-center gap-3 mb-6 app-heading">
       <Link :href="route('layaways.index')" class="text-gray-400 hover:text-gray-600 transition">
         <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
@@ -100,10 +218,22 @@ function variantLabel(variant) {
       <h1 class="text-2xl font-bold text-gray-900">Nuevo apartado</h1>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div
+      v-if="statusMessage"
+      class="mb-4 rounded-xl border px-4 py-3 text-sm app-surface"
+      :class="statusMessage.type === 'success'
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+        : statusMessage.type === 'warning'
+          ? 'border-amber-200 bg-amber-50 text-amber-800'
+          : 'border-red-200 bg-red-50 text-red-800'"
+    >
+      {{ statusMessage.text }}
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 app-card-grid">
       <!-- Left: Product grid -->
-      <div class="lg:col-span-2 space-y-4">
-        <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100">
+      <div class="lg:col-span-2 space-y-4 app-card-stack">
+        <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 app-surface">
           <h2 class="text-sm font-semibold text-gray-700 mb-3">Productos disponibles</h2>
           <div class="relative mb-4">
             <svg class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400"
@@ -114,11 +244,11 @@ function variantLabel(variant) {
               class="w-full rounded-lg border border-gray-200 py-2 pl-9 pr-3 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400" />
           </div>
           <div v-if="filteredProducts.length === 0" class="py-10 text-center text-sm text-gray-400">Sin productos disponibles</div>
-          <div v-else class="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[520px] overflow-y-auto pr-1">
+          <div v-else class="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[520px] overflow-y-auto pr-1 app-card-grid">
             <button v-for="p in filteredProducts" :key="p.id" @click="addToCart(p)"
-              :disabled="!firstVariantId(p) || inCartIds.has(firstVariantId(p))"
-              class="relative flex flex-col rounded-xl border text-left transition focus:outline-none"
-              :class="inCartIds.has(firstVariantId(p)) ? 'border-emerald-300 bg-emerald-50 opacity-80 cursor-default' : 'border-gray-200 bg-white hover:border-gray-900 hover:shadow-sm'">
+              :disabled="!availableVariants(p).length || allVariantsAdded(p)"
+              class="relative flex flex-col rounded-xl border text-left transition focus:outline-none app-surface"
+              :class="allVariantsAdded(p) ? 'border-emerald-300 bg-emerald-50 opacity-80 cursor-default' : 'border-gray-200 bg-white hover:border-gray-900 hover:shadow-sm'">
               <div class="aspect-square w-full overflow-hidden rounded-t-xl bg-gray-100">
                 <img v-if="thumbUrl(p)" :src="thumbUrl(p)" :alt="p.name" class="h-full w-full object-cover" />
                 <div v-else class="flex h-full items-center justify-center text-gray-300">
@@ -127,15 +257,15 @@ function variantLabel(variant) {
                   </svg>
                 </div>
               </div>
-              <div v-if="inCartIds.has(firstVariantId(p))" class="absolute inset-0 flex items-center justify-center rounded-xl bg-emerald-600/20">
+              <div v-if="allVariantsAdded(p)" class="absolute inset-0 flex items-center justify-center rounded-xl bg-emerald-600/20">
                 <svg class="h-8 w-8 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                 </svg>
               </div>
               <div class="p-2 space-y-0.5">
                 <p class="text-xs font-semibold text-gray-800 line-clamp-2 leading-tight">{{ p.name }}</p>
-                <p class="mt-1 text-xs text-gray-500 line-clamp-2">{{ variantLabel((p.variants || [])[0]) }}</p>
-                <p class="text-sm font-bold text-gray-900 mt-1">${{ money((p.variants || [])[0]?.sale_price_effective ?? p.sale_price) }}</p>
+                <p class="mt-1 text-xs text-gray-500 line-clamp-2">{{ availableVariants(p).length > 1 ? `${availableVariants(p).length} tallas y colores disponibles` : variantLabel(availableVariants(p)[0]) }}</p>
+                <p class="text-sm font-bold text-gray-900 mt-1">{{ availableVariants(p).length > 1 ? 'Desde ' : '' }}${{ money(minimumPrice(p)) }}</p>
               </div>
             </button>
           </div>
@@ -143,9 +273,9 @@ function variantLabel(variant) {
       </div>
 
       <!-- Right: Summary -->
-      <div class="space-y-4">
+      <div class="space-y-4 app-card-stack">
         <!-- Customer -->
-        <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 space-y-3">
+        <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 space-y-3 app-surface">
           <h2 class="text-sm font-semibold text-gray-700">Cliente</h2>
           <div class="relative">
             <input v-model="customerQuery" type="text" placeholder="Buscar cliente..."
@@ -154,7 +284,8 @@ function variantLabel(variant) {
             <ul v-if="customerSuggestions.length"
               class="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-md max-h-48 overflow-y-auto">
               <li v-for="c in customerSuggestions" :key="c.id" @click="selectCustomer(c)"
-                class="px-3 py-2 text-sm cursor-pointer hover:bg-gray-50">
+                class="flex items-center gap-2 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50">
+                <img v-if="c.photo_url" :src="c.photo_url" :alt="`Foto de ${c.name}`" class="h-7 w-7 rounded-full object-cover">
                 <span class="font-medium text-gray-800">{{ c.name }}</span>
                 <span v-if="c.phone" class="ml-2 text-gray-400 text-xs">{{ c.phone }}</span>
               </li>
@@ -174,8 +305,31 @@ function variantLabel(variant) {
           <p class="text-xs text-gray-400">Opcional</p>
         </div>
 
+        <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 space-y-3 app-surface app-card-stack">
+          <h2 class="text-sm font-semibold text-gray-700">Vigencia (dias)</h2>
+          <select v-model="vigenciaSeleccion"
+            class="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400">
+            <option v-for="dias in vigenciaOpciones" :key="dias" :value="String(dias)">{{ dias }} dias</option>
+            <option value="manual">Otro (captura manual)</option>
+          </select>
+
+          <div v-if="vigenciaSeleccion === 'manual'">
+            <label class="mb-1 block text-xs font-medium text-gray-600">Dias de vigencia</label>
+            <input v-model="vigenciaManual" type="number" min="1" step="1" placeholder="Ej. 21"
+              class="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400" />
+          </div>
+
+          <p v-if="form.errors.vigencia_dias" class="text-xs text-red-600">{{ form.errors.vigencia_dias }}</p>
+
+          <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 app-surface">
+            <p>Fecha del apartado: <strong>{{ fmtDateShort(fechaApartadoPreview) }}</strong></p>
+            <p>Vigencia: <strong>{{ Number.isInteger(vigenciaDias) && vigenciaDias > 0 ? vigenciaDias + ' dias' : 'Invalida' }}</strong></p>
+            <p>Vence el: <strong>{{ fechaVencimientoPreview ? fmtDateShort(fechaVencimientoPreview) : 'Fecha invalida' }}</strong></p>
+          </div>
+        </div>
+
         <!-- Cart -->
-        <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 space-y-3">
+        <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 space-y-3 app-surface">
           <h2 class="text-sm font-semibold text-gray-700">Carrito <span class="text-gray-400 font-normal">({{ cart.length }})</span></h2>
           <p v-if="form.errors.items" class="text-xs text-red-600">{{ form.errors.items }}</p>
           <div v-if="cart.length === 0" class="py-6 text-center text-sm text-gray-400">Agrega productos desde la lista</div>
@@ -193,7 +347,7 @@ function variantLabel(variant) {
                   <button type="button" class="rounded border border-gray-200 px-1.5" @click="incQty(item.variant.id)">+</button>
                 </div>
               </div>
-              <span class="text-sm font-semibold text-gray-900 flex-shrink-0">${{ money((item.variant.sale_price_effective || item.product.sale_price) * item.qty) }}</span>
+              <span class="text-sm font-semibold text-gray-900 flex-shrink-0">${{ money((item.variant.sale_price_effective ?? item.product.sale_price) * item.qty) }}</span>
               <button @click="removeFromCart(item.variant.id)" class="text-gray-300 hover:text-red-500 transition flex-shrink-0">
                 <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
@@ -208,20 +362,26 @@ function variantLabel(variant) {
         </div>
 
         <!-- Initial payment -->
-        <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 space-y-3">
+        <div v-if="discountPolicy.canApply" class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 space-y-3 app-surface">
+          <h2 class="text-sm font-semibold text-gray-700">Descuento global manual</h2>
+          <p class="text-xs text-gray-500">Disponible con al menos dos unidades.</p>
+          <p v-if="!discountPolicy.canHigh" class="text-xs text-amber-700">Límite de cajero: {{ discountPolicy.basicMaxPercent }}% o ${{ discountPolicy.basicMaxAmount }}.</p>
+          <div class="flex gap-2"><select v-model="discountType" :disabled="totalUnits < 2" class="flex-1 rounded-lg border-gray-200 text-sm"><option value="">Sin descuento</option><option value="percent">Porcentaje</option><option value="amount">Monto</option></select><input v-model="discountValue" type="number" min="0" step="0.01" :max="discountPolicy.canHigh ? undefined : (discountType === 'percent' ? discountPolicy.basicMaxPercent : discountPolicy.basicMaxAmount)" :disabled="totalUnits < 2 || !discountType" class="w-28 rounded-lg border-gray-200 text-sm"></div>
+          <p v-if="form.errors.global_discount_value" class="text-xs text-red-600">{{ form.errors.global_discount_value }}</p>
+          <p class="text-sm font-semibold">Total con descuento: ${{ discountedTotal }}</p>
+        </div>
+
+        <!-- Initial payment -->
+        <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 space-y-3 app-surface">
           <h2 class="text-sm font-semibold text-gray-700">Abono inicial <span class="text-gray-400 font-normal">(opcional)</span></h2>
-          <div class="relative">
-            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
-            <input v-model="initialPaymentAmount" type="number" min="0" step="0.01" placeholder="0.00"
-              class="w-full rounded-lg border border-gray-200 py-2 pl-7 pr-3 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400" />
+          <div v-for="(payment, index) in initialPayments" :key="index" class="space-y-2 border-b border-gray-100 pb-3">
+            <input v-model="payment.amount" type="number" min="0" step="0.01" placeholder="Monto" class="w-full rounded-lg border border-gray-200 text-sm">
+            <select v-model="payment.method" class="w-full rounded-lg border border-gray-200 text-sm"><option value="cash">Efectivo</option><option value="card">Tarjeta</option><option value="transfer">Transferencia</option><option value="other">Otro</option></select>
+            <input v-model="payment.reference" placeholder="Referencia (opcional)" class="w-full rounded-lg border border-gray-200 text-sm">
+            <input v-model="payment.payer_name" maxlength="180" placeholder="Nombre de quien paga (opcional)" class="w-full rounded-lg border border-gray-200 text-sm">
+            <button v-if="initialPayments.length > 1" type="button" class="text-xs text-red-700 underline" @click="initialPayments.splice(index, 1)">Quitar pago</button>
           </div>
-          <select v-model="initialPaymentMethod"
-            class="w-full rounded-lg border border-gray-200 py-2 px-3 text-sm focus:border-gray-400 focus:outline-none focus:ring-1 focus:ring-gray-400">
-            <option value="cash">Efectivo</option>
-            <option value="card">Tarjeta</option>
-            <option value="transfer">Transferencia</option>
-            <option value="other">Otro</option>
-          </select>
+          <button v-if="initialPayments.length < 10" type="button" class="text-xs font-semibold underline" @click="initialPayments.push({ method: 'cash', amount: '', reference: '', payer_name: '' })">Agregar otro método de pago</button>
         </div>
 
         <button @click="submit" :disabled="cart.length === 0 || form.processing"
@@ -230,5 +390,12 @@ function variantLabel(variant) {
         </button>
       </div>
     </div>
+    <VariantSelectorModal
+      :open="variantSelectorOpen"
+      :product="selectableProduct"
+      :in-cart-variant-ids="[...inCartIds]"
+      @close="variantSelectorOpen = false"
+      @confirm="confirmVariant"
+    />
   </div>
 </template>

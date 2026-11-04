@@ -78,6 +78,7 @@ class VariantInventorySaleTest extends TestCase
                     'amount' => 200,
                 ],
             ],
+            'dinero_recibido' => 200,
         ], $user);
 
         $this->assertDatabaseHas('product_variants', [

@@ -3,9 +3,11 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreProductRequest extends FormRequest
 {
+    use \App\Http\Requests\Concerns\ProductImageAssociationRules;
     public function authorize(): bool
     {
         // Se controla por middleware/permisos en rutas.
@@ -15,7 +17,8 @@ class StoreProductRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'sku' => ['nullable', 'string', 'max:80', 'unique:products,sku'],
+            ...$this->imageAssociationRules(),
+            'sku' => ['prohibited'],
             'name' => ['required', 'string', 'max:180'],
             'description' => ['nullable', 'string'],
 
@@ -27,14 +30,17 @@ class StoreProductRequest extends FormRequest
             'variants.*.size_id' => ['required', 'integer', 'exists:sizes,id'],
             'variants.*.color_id' => ['required', 'integer', 'exists:colors,id'],
             'variants.*.stock' => ['required', 'integer', 'min:1'],
-            'variants.*.purchase_price' => ['nullable', 'numeric', 'min:0'],
+            'variants.*.purchase_price' => [Rule::prohibitedIf(! $this->user()?->can('products.view_purchase_price')), 'nullable', 'numeric', 'min:0'],
             'variants.*.sale_price' => ['nullable', 'numeric', 'min:0'],
 
-            'purchase_price' => ['nullable', 'numeric', 'min:0'],
+            'purchase_price' => [Rule::prohibitedIf(! $this->user()?->can('products.view_purchase_price')), 'nullable', 'numeric', 'min:0'],
             'sale_price' => ['nullable', 'numeric', 'min:0'],
 
             'status' => ['nullable', 'string', 'in:disponible,apartado,vendido,cancelado'],
             'sold_at' => ['nullable', 'date'],
+
+            'occasion_ids' => ['nullable', 'array'],
+            'occasion_ids.*' => ['integer', 'distinct', 'exists:occasions,id'],
 
             // Imágenes
             'images' => ['nullable', 'array', 'max:10'],

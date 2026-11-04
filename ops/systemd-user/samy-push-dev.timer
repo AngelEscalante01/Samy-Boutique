@@ -1,0 +1,11 @@
+[Unit]
+Description=Process Samy Boutique DEV push outbox every minute
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+Persistent=true
+AccuracySec=1s
+Unit=samy-push-dev.service
+
+[Install]
+WantedBy=timers.target

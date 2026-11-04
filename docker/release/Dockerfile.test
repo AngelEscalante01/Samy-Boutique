@@ -1,0 +1,15 @@
+ARG SAMY_RELEASE_TAG=20261101-r5
+FROM samy-release-app:${SAMY_RELEASE_TAG}
+USER root
+COPY tests ./tests
+COPY resources/js ./resources/js
+COPY database/factories ./database/factories
+COPY phpunit.xml ./phpunit.xml
+RUN composer install --no-interaction --prefer-dist --no-scripts \
+    && composer dump-autoload --no-scripts \
+    && touch .env \
+    && chmod -R a+rX /app \
+    && chown -R www-data:www-data storage bootstrap/cache
+USER www-data
+ENV APP_ENV=testing APP_KEY=base64:bG9jYWwtb25seS1zYW15LWtleS0zMi1ieXRlcyEhISE=
+ENTRYPOINT ["php", "artisan", "test", "--do-not-cache-result"]

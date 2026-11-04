@@ -1,0 +1,15 @@
+FROM samy-sandbox-app:local
+USER root
+COPY composer.json composer.lock ./
+COPY tests ./tests
+COPY resources/js ./resources/js
+COPY database/factories ./database/factories
+COPY database/seeders ./database/seeders
+COPY phpunit.xml ./phpunit.xml
+RUN composer install --no-interaction --prefer-dist --no-scripts --ignore-platform-reqs \
+    && composer dump-autoload --no-scripts \
+    && touch /app/.env \
+    && chown -R www-data:www-data storage bootstrap/cache
+USER www-data
+ENV APP_ENV=testing APP_KEY=base64:bG9jYWwtb25seS1zYW15LWtleS0zMi1ieXRlcyEhISE=
+ENTRYPOINT ["php", "artisan", "test", "--do-not-cache-result"]

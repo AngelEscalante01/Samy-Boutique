@@ -5,6 +5,7 @@ import {
     getRecord,
     putRecord,
 } from '@/offline/db'
+import { prefetchProductImages } from './image-cache-policy'
 
 function resolveEndpoint(name, fallback) {
     if (typeof window !== 'undefined' && typeof window.route === 'function') {
@@ -59,19 +60,11 @@ export async function downloadSnapshot() {
 }
 
 async function precacheImagesInBatches(products, batchSize = 20) {
-    const urls = products
-        .map((p) => p.image_url)
-        .filter(Boolean)
-
-    for (let index = 0; index < urls.length; index += batchSize) {
-        const batch = urls.slice(index, index + batchSize)
-
-        await Promise.allSettled(
-            batch.map((url) => fetch(url, { method: 'GET', credentials: 'same-origin' })),
-        )
-
-        await new Promise((resolve) => setTimeout(resolve, 30))
-    }
+    return prefetchProductImages(products, {
+        appOrigin: window.location.origin,
+        publicBase: __SAMY_PRODUCT_IMAGES_BASE__,
+        batchSize,
+    })
 }
 
 export async function saveSnapshot(data, options = {}) {
@@ -83,7 +76,7 @@ export async function saveSnapshot(data, options = {}) {
     for (const product of products) {
         await putRecord(STORES.products, {
             ...product,
-            images: product.image_url ? [{ url: product.image_url, path: null }] : [],
+            images: product.image_url ? [{ url: product.image_url, path: null, generation: product.image_generation ?? null }] : [],
         })
     }
 
@@ -109,14 +102,13 @@ export async function saveSnapshot(data, options = {}) {
         products_count: products.length,
     })
 
-    if (options.precacheImages !== false) {
-        await precacheImagesInBatches(products)
-    }
+    const imageCache = options.precacheImages !== false ? await precacheImagesInBatches(products) : null
 
     return {
         version: data?.version ?? null,
         generated_at: data?.generated_at ?? null,
         products_count: products.length,
+        image_cache: imageCache,
     }
 }
 

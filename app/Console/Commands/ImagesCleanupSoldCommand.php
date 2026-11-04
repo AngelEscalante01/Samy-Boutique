@@ -3,106 +3,65 @@
 namespace App\Console\Commands;
 
 use App\Models\ProductImage;
+use App\Models\ProductStockEpisode;
+use App\Models\ProductVariant;
+use App\Models\LayawayItem;
+use App\Services\ProductImageReferenceGuard;
 use Illuminate\Console\Command;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
-use App\Models\Setting;
 
 class ImagesCleanupSoldCommand extends Command
 {
-    protected $signature = 'images:cleanup-sold';
-
-    protected $description = 'Limpia imágenes de productos agotados por más de 15 días';
+    protected $signature = 'images:cleanup-sold {--dry-run : Inventory only; never deletes objects}';
+    protected $description = 'Read-only retention preflight; legacy dates are not proof of sale depletion';
 
     public function handle(): int
     {
-        $days = (int) Setting::get('sales.delete_images_after_days', 15);
-        $mode = Setting::get('sales.delete_images_mode', 'soft') === 'hard' ? 'hard' : 'soft';
-
-        $cutoff = now()->subDays($days);
-        $disk = Storage::disk('public');
-
-        $imagesProcessed = 0;
-        $productsProcessed = [];
-        $filesDeleted = 0;
-        $filesMissing = 0;
-        $errors = 0;
-
-        ProductImage::query()
-            ->whereNull('deleted_at')
-            ->whereHas('product', function (Builder $query) use ($cutoff) {
-                $query->where(function (Builder $dateQuery) use ($cutoff) {
-                    $dateQuery->where(function (Builder $soldOutQuery) use ($cutoff) {
-                        $soldOutQuery->whereNotNull('sold_out_at')->where('sold_out_at', '<=', $cutoff);
-                    })->orWhere(function (Builder $soldQuery) use ($cutoff) {
-                        // Legacy single-variant products used sold_at before sold_out_at was introduced.
-                        $soldQuery->whereNull('sold_out_at')->where('status', 'vendido')->where('sold_at', '<=', $cutoff);
-                    });
-                });
-            })
-            ->with(['product:id'])
-            ->orderBy('id')
-            ->chunkById(200, function ($images) use (
-                $disk,
-                $mode,
-                &$imagesProcessed,
-                &$productsProcessed,
-                &$filesDeleted,
-                &$filesMissing,
-                &$errors
-            ) {
+        // No remote deletion while offline assignments cannot be reconciled.
+        $this->warn('DRY-RUN ONLY: no objects are deleted; offline assignment reconciliation remains unverified.');
+        ProductImage::query()->whereNull('deleted_at')->with(['product:id,sold_out_at', 'derivatives'])
+            ->orderBy('id')->chunkById(200, function ($images) {
                 foreach ($images as $image) {
-                    try {
-                        $path = (string) $image->path;
-
-                        if ($path !== '' && $disk->exists($path)) {
-                            $disk->delete($path);
-                            $filesDeleted++;
-                        } else {
-                            $filesMissing++;
+                    $variants = ProductVariant::query()->where('product_id', $image->product_id)->where('active', true);
+                    if ($image->product_variant_id) $variants->whereKey($image->product_variant_id);
+                    $variants = $variants->get(['id', 'stock']);
+                    $reason = null;
+                    $dates = [];
+                    if ($variants->isEmpty()) $reason = 'no_active_variant';
+                    foreach ($variants as $variant) {
+                        if ($variant->stock > 0) { $reason = 'stock_available'; break; }
+                        if (LayawayItem::query()->where('product_variant_id', $variant->id)
+                            ->whereHas('layaway', fn ($query) => $query->where('status', 'open'))->exists()) {
+                            $reason = 'active_layaway'; break;
                         }
-
-                        if ($mode === 'hard') {
-                            $image->delete();
-                        } else {
-                            $image->forceFill([
-                                'deleted_at' => now(),
-                                'deleted_by' => null,
-                            ])->save();
+                        $episode = ProductStockEpisode::query()->where('product_variant_id', $variant->id)
+                            ->whereNull('cancelled_at')->with('sale:id,status')->latest('id')->first();
+                        if (! $episode || $episode->sale?->status !== 'completed') {
+                            $reason = 'no_confirmed_sale_episode'; break;
                         }
-
-                        $imagesProcessed++;
-                        $productsProcessed[$image->product_id] = true;
-                    } catch (\Throwable $exception) {
-                        $errors++;
-
-                        Log::warning('images:cleanup-sold - error procesando imagen', [
-                            'product_image_id' => $image->id,
-                            'product_id' => $image->product_id,
-                            'path' => $image->path,
-                            'mode' => $mode,
-                            'error' => $exception->getMessage(),
-                        ]);
+                        if ($image->created_at && $image->created_at->gt($episode->started_at)) {
+                            $reason = 'image_added_after_episode'; break;
+                        }
+                        $dates[] = $episode->started_at->copy()->addHours(15 * 24);
                     }
+                    $eligibleAt = $dates ? max($dates) : null;
+                    if (! $reason && $eligibleAt?->isFuture()) $reason = 'waiting_15_full_days';
+                    if (! $reason) {
+                        $guard = app(ProductImageReferenceGuard::class);
+                        $reason = $guard->reasonForImage($image);
+                    }
+                    if (! $reason) $reason = 'offline_reconciliation_unverified';
+                    $this->line(json_encode([
+                        'image_id' => $image->id,
+                        'product_id' => $image->product_id,
+                        'variant_id' => $image->product_variant_id,
+                        'bytes' => (int) $image->bytes + (int) $image->derivatives->sum('bytes'),
+                        'eligible' => false,
+                        'reason' => $reason,
+                        'candidate_at_utc' => $eligibleAt?->utc()->toIso8601String(),
+                        'legacy_sold_out_at' => $image->product?->sold_out_at?->toIso8601String(),
+                    ], JSON_THROW_ON_ERROR));
                 }
             });
-
-        $productsCount = count($productsProcessed);
-
-        Log::info('images:cleanup-sold ejecutado', [
-            'mode' => $mode,
-            'days' => $days,
-            'cutoff' => $cutoff->toDateTimeString(),
-            'images_processed' => $imagesProcessed,
-            'products_processed' => $productsCount,
-            'files_deleted' => $filesDeleted,
-            'files_missing' => $filesMissing,
-            'errors' => $errors,
-        ]);
-
-        $this->info("Cleanup completado. mode={$mode}, days={$days}, images={$imagesProcessed}, products={$productsCount}, files_deleted={$filesDeleted}, files_missing={$filesMissing}, errors={$errors}");
-
         return self::SUCCESS;
     }
 }

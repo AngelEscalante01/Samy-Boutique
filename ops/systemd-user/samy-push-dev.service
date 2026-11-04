@@ -1,0 +1,8 @@
+[Unit]
+Description=Samy Boutique DEV push outbox processor
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/angel/proyectos/Samy-boutique-global/Samy-Boutique
+ExecStart=/usr/bin/php artisan notifications:process-push
+TimeoutStartSec=120

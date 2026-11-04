@@ -4,12 +4,16 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Models\NotificationDelivery;
+use App\Models\NotificationDevice;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class AuthenticatedSessionController extends Controller
 {
@@ -27,13 +31,15 @@ class AuthenticatedSessionController extends Controller
     /**
      * Handle an incoming authentication request.
      */
-    public function store(LoginRequest $request): RedirectResponse
+    public function store(LoginRequest $request): SymfonyResponse
     {
         $request->authenticate();
 
         $request->session()->regenerate();
 
-        return redirect()->intended(route('dashboard', absolute: false));
+        // The session token rotates at login. A full Inertia navigation refreshes
+        // the page's CSRF meta tag before POS and report fetch requests run.
+        return Inertia::location(redirect()->intended(route('dashboard', absolute: false)));
     }
 
     /**
@@ -41,6 +47,32 @@ class AuthenticatedSessionController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+        $installationId = $request->validate(['installation_id' => ['nullable', 'uuid']])['installation_id'] ?? null;
+        if ($installationId) {
+            DB::transaction(function () use ($request, $installationId): void {
+                $device = NotificationDevice::query()
+                    ->where('installation_id', $installationId)
+                    ->where('user_id', $request->user()->id)
+                    ->lockForUpdate()
+                    ->first();
+                if (! $device) {
+                    return;
+                }
+
+                NotificationDelivery::query()
+                    ->where('device_id', $device->id)
+                    ->whereIn('status', ['pending', 'error_temporal', 'sending'])
+                    ->update(['status' => 'cancelled', 'next_attempt_at' => null, 'last_error_code' => 'device_logged_out']);
+                $device->update([
+                    'user_id' => null,
+                    'token' => null,
+                    'token_hash' => null,
+                    'active' => false,
+                    'permission_status' => 'not_determined',
+                ]);
+            });
+        }
+
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();

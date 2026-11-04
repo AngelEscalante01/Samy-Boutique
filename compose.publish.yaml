@@ -1,0 +1,32 @@
+# Apply only at the approved final cutover, with .env.production.private.
+# The base release compose has no public route and never joins the shared proxy.
+services:
+  gateway:
+    networks: [application, access, proxy]
+    labels:
+      traefik.enable: '${SAMY_PUBLISH_ROUTING:-false}'
+      traefik.docker.network: proxy
+      traefik.http.services.samy-production.loadbalancer.server.port: '80'
+      traefik.http.routers.samy-catalog.rule: Host(`samyboutique.com.mx`) || Host(`www.samyboutique.com.mx`)
+      traefik.http.routers.samy-catalog.entrypoints: websecure
+      traefik.http.routers.samy-catalog.tls.certresolver: letsencrypt
+      traefik.http.routers.samy-catalog.service: samy-production
+      traefik.http.routers.samy-catalog.middlewares: samy-www,samy-headers
+      traefik.http.routers.samy-system.rule: Host(`sistema.samyboutique.com.mx`)
+      traefik.http.routers.samy-system.entrypoints: websecure
+      traefik.http.routers.samy-system.tls.certresolver: letsencrypt
+      traefik.http.routers.samy-system.service: samy-production
+      traefik.http.routers.samy-system.middlewares: samy-headers
+      traefik.http.routers.samy-http.rule: Host(`samyboutique.com.mx`) || Host(`www.samyboutique.com.mx`) || Host(`sistema.samyboutique.com.mx`)
+      traefik.http.routers.samy-http.entrypoints: web
+      traefik.http.routers.samy-http.middlewares: samy-https
+      traefik.http.routers.samy-http.service: samy-production
+      traefik.http.middlewares.samy-https.redirectscheme.scheme: https
+      traefik.http.middlewares.samy-https.redirectscheme.permanent: 'true'
+      traefik.http.middlewares.samy-www.redirectregex.regex: '^https?://www\.samyboutique\.com\.mx/(.*)'
+      traefik.http.middlewares.samy-www.redirectregex.replacement: 'https://samyboutique.com.mx/$${1}'
+      traefik.http.middlewares.samy-www.redirectregex.permanent: 'true'
+      traefik.http.middlewares.samy-headers.headers.contentTypeNosniff: 'true'
+      traefik.http.middlewares.samy-headers.headers.referrerPolicy: strict-origin-when-cross-origin
+networks:
+  proxy: {external: true, name: proxy}

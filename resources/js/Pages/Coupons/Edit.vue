@@ -62,10 +62,10 @@ function valueLabel() {
 <template>
   <Head :title="'Editar: ' + coupon.code" />
 
-  <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 app-page">
 
     <!-- Back + title -->
-    <div class="flex items-center gap-3 mb-6">
+    <div class="flex items-center gap-3 mb-6 app-heading">
       <Link :href="route('coupons.index')" class="text-gray-400 hover:text-gray-600 transition">
         <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
@@ -79,7 +79,7 @@ function valueLabel() {
 
     <!-- Flash -->
     <div v-if="flash.success"
-      class="mb-5 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-800 flex items-center gap-2">
+      class="mb-5 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-800 flex items-center gap-2 app-surface">
       <svg class="h-4 w-4 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
       </svg>
@@ -87,7 +87,7 @@ function valueLabel() {
     </div>
 
     <!-- ── Resumen ──────────────────────────────────────────────────────────── -->
-    <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 mb-6">
+    <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 mb-6 app-surface">
       <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">Resumen actual</h2>
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
 
@@ -129,10 +129,10 @@ function valueLabel() {
       </div>
     </div>
 
-    <form @submit.prevent="submit" class="space-y-6">
+    <form @submit.prevent="submit" class="space-y-6 app-card-stack">
 
       <!-- ── Sección A ──────────────────────────────────────────────────────── -->
-      <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
+      <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-100 app-surface">
         <h2 class="text-sm font-semibold text-gray-700 mb-5 flex items-center gap-2">
           <svg class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M9 14.25l6-6m4.5-3.493V21.75l-3.75-1.5-3.75 1.5-3.75-1.5-3.75 1.5V4.757c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0 1 11.186 0c1.1.128 1.907 1.077 1.907 2.185Z" />
@@ -216,7 +216,7 @@ function valueLabel() {
       </div>
 
       <!-- ── Sección B: Reglas ──────────────────────────────────────────────── -->
-      <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-100">
+      <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-100 app-surface">
         <h2 class="text-sm font-semibold text-gray-700 mb-5 flex items-center gap-2">
           <svg class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />

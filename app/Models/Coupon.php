@@ -35,6 +35,7 @@ class Coupon extends Model
 
     public function redemptions(): HasMany
     {
-        return $this->hasMany(CouponRedemption::class);
+        return $this->hasMany(CouponRedemption::class)
+            ->whereHas('sale', fn ($query) => $query->where('status', 'completed'));
     }
 }

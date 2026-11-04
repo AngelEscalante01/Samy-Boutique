@@ -6,10 +6,14 @@
     "license": "MIT",
     "require": {
         "php": "^8.2",
+        "ext-exif": "*",
+        "dompdf/dompdf": "^3.1",
         "inertiajs/inertia-laravel": "^2.0",
-        "laravel/framework": "^11.0",
+        "laravel/framework": "^12.0",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^2.9",
+        "league/flysystem-aws-s3-v3": "^3.0",
+        "picqer/php-barcode-generator": "^3.2",
         "spatie/laravel-permission": "^6.24",
         "tightenco/ziggy": "^2.0"
     },
@@ -20,7 +24,7 @@
         "laravel/sail": "^1.26",
         "mockery/mockery": "^1.6",
         "nunomaduro/collision": "^8.0",
-        "phpunit/phpunit": "^10.5",
+        "phpunit/phpunit": "^11.0",
         "spatie/laravel-ignition": "^2.4"
     },
     "autoload": {
@@ -54,7 +58,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-master": "11.x-dev"
+            "dev-master": "12.x-dev"
         },
         "laravel": {
             "dont-discover": []
@@ -67,6 +71,9 @@
         "allow-plugins": {
             "pestphp/pest-plugin": true,
             "php-http/discovery": true
+        },
+        "platform": {
+            "php": "8.2.0"
         }
     },
     "minimum-stability": "stable",

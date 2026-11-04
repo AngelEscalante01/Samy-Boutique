@@ -1,0 +1,19 @@
+{
+  "version": "1.0.0",
+  "version_code": 2026110101,
+  "application_id": "mx.com.samyboutique.app",
+  "api_base_url": "https://sistema.samyboutique.com.mx/api",
+  "require_https": true,
+  "firebase_project": "samy-boutique",
+  "signing_certificate_sha256": "457cd5fcd3b80dc91cc7e626cf43d877fcaec30d26e96971c39b18dec9ad2ad4",
+  "files": {
+    "Samy-Boutique-1.0.0.apk": {
+      "bytes": 66078350,
+      "sha256": "520553955cd3b6abe3254038984b9f500d8823ca8ef9085202382a9895cb067c"
+    },
+    "Samy-Boutique-1.0.0.aab": {
+      "bytes": 64303569,
+      "sha256": "92523d5a0e149b661a4ad582b7d77be70f353076154f1dae3e6e29e06ebc714a"
+    }
+  }
+}

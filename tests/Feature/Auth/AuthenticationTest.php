@@ -51,4 +51,22 @@ class AuthenticationTest extends TestCase
         $this->assertGuest();
         $response->assertRedirect('/');
     }
+
+    public function test_disabled_users_cannot_start_a_web_session(): void
+    {
+        $user = User::factory()->create(['active' => false]);
+        $this->post('/login', ['email' => $user->email, 'password' => 'password'])
+            ->assertSessionHasErrors('email');
+        $this->assertGuest();
+    }
+
+    public function test_disabling_a_user_closes_the_existing_web_session_before_next_action(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $user->update(['active' => false]);
+        $this->getJson('/dashboard/data/summary')->assertForbidden();
+        $this->assertGuest();
+        $this->get('/dashboard')->assertRedirect('/login');
+    }
 }

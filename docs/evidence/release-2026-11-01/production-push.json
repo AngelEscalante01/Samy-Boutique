@@ -1,0 +1,25 @@
+{
+  "announcement_id": 2,
+  "cashier_manual_send_permission": false,
+  "notification_id": 52,
+  "web": {
+    "receipt_confirmed_by_user": true,
+    "delivery_id": 94,
+    "status": "sent",
+    "tap_opens_correct_notice_confirmed_by_user": true
+  },
+  "firebase_project": "samy-boutique",
+  "android": {
+    "receipt_confirmed_by_user": true,
+    "delivery_id": 95,
+    "status": "sent",
+    "tap_opens_correct_notice_confirmed_by_user": true
+  },
+  "manager_manual_send_permission": true,
+  "commercial_test_operations_created": 0,
+  "environment": "production",
+  "pending": [
+    "physical client ticket printer acceptance"
+  ],
+  "idempotency_key": "26310101-1101-4000-8000-000000000001"
+}

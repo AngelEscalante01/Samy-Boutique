@@ -52,6 +52,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'reports.view',
             'cash_cuts.create',
             'users.manage',
+            'notifications.send',
         ];
 
         foreach ($permissions as $permission) {

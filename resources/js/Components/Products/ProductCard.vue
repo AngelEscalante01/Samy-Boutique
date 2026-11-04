@@ -59,7 +59,7 @@ const profit = (p) => {
 </script>
 
 <template>
-    <div class="group flex flex-col overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-100 transition-shadow hover:shadow-md">
+    <div class="group flex flex-col overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-100 transition-shadow hover:shadow-md app-surface">
 
         <!-- Carrusel de imagenes -->
         <div class="relative aspect-[4/3] w-full overflow-hidden bg-gray-100">
@@ -126,7 +126,7 @@ const profit = (p) => {
         <div class="flex flex-1 flex-col gap-2 p-4">
             <div>
                 <p class="text-xs text-gray-400">{{ product.sku }}</p>
-                <p class="truncate text-sm font-bold leading-tight text-gray-900">{{ product.name }}</p>
+                <Link :href="route('products.show', product.id)" class="block truncate text-sm font-bold leading-tight text-gray-900 hover:underline">{{ product.name }}</Link>
             </div>
 
             <div class="flex flex-wrap gap-1">
@@ -153,8 +153,10 @@ const profit = (p) => {
                 </template>
             </div>
 
-            <div v-if="canUpdate" class="mt-2 border-t border-gray-50 pt-2">
+            <div class="mt-2 grid gap-2 border-t border-gray-50 pt-2">
+                <Link :href="route('products.show', product.id)" class="flex items-center justify-center rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50">Ver producto</Link>
                 <Link
+                    v-if="canUpdate"
                     :href="route('products.edit', product.id)"
                     class="flex items-center justify-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50"
                 >

@@ -1,0 +1,13 @@
+[Unit]
+Description=Resume only Samy services after an interrupted backup capture
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/python3 /usr/local/lib/samy-backup/release-backup.py --release-directory /home/angel/samy-release-20261101 --resume-only
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

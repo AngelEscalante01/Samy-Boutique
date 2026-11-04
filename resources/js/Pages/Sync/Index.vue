@@ -114,8 +114,8 @@ onBeforeUnmount(() => {
 <template>
     <Head title="Pendientes offline" />
 
-    <div class="mx-auto max-w-6xl space-y-5 p-4 sm:p-6">
-        <div class="flex flex-wrap items-center justify-between gap-3">
+    <div class="mx-auto max-w-6xl space-y-5 p-4 sm:p-6 app-card-stack app-page">
+        <div class="flex flex-wrap items-center justify-between gap-3 app-heading">
             <div>
                 <h1 class="text-xl font-semibold tracking-wide text-zinc-900">Pendientes offline</h1>
                 <p class="text-sm text-stone-500">
@@ -151,22 +151,22 @@ onBeforeUnmount(() => {
             </div>
         </div>
 
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div class="rounded-2xl border border-stone-200 bg-white p-4">
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-3 app-card-grid">
+            <div class="rounded-2xl border border-stone-200 bg-white p-4 app-surface">
                 <p class="text-xs font-semibold uppercase tracking-wide text-stone-400">Pendientes</p>
                 <p class="mt-1 text-2xl font-semibold text-zinc-900">{{ counts.sales }}</p>
             </div>
-            <div class="rounded-2xl border border-stone-200 bg-white p-4">
+            <div class="rounded-2xl border border-stone-200 bg-white p-4 app-surface">
                 <p class="text-xs font-semibold uppercase tracking-wide text-stone-400">Conflictos</p>
                 <p class="mt-1 text-2xl font-semibold text-amber-700">{{ counts.conflicts }}</p>
             </div>
-            <div class="rounded-2xl border border-stone-200 bg-white p-4">
+            <div class="rounded-2xl border border-stone-200 bg-white p-4 app-surface">
                 <p class="text-xs font-semibold uppercase tracking-wide text-stone-400">Total cola</p>
                 <p class="mt-1 text-2xl font-semibold text-zinc-900">{{ counts.total }}</p>
             </div>
         </div>
 
-        <section class="overflow-hidden rounded-2xl border border-stone-200 bg-white">
+        <section class="overflow-hidden rounded-2xl border border-stone-200 bg-white app-surface">
             <div class="overflow-x-auto">
                 <table class="min-w-full text-sm">
                     <thead class="bg-stone-50 text-left text-xs uppercase tracking-wide text-stone-500">

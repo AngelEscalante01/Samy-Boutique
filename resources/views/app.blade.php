@@ -5,7 +5,15 @@
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
         <meta name="csrf-token" content="{{ csrf_token() }}">
 
-        <title inertia>{{ config('app.name', 'Laravel') }}</title>
+        <title inertia>{{ $page['props']['seo']['title'] ?? config('app.name', 'Laravel') }}</title>
+        @if (isset($page['props']['seo']))
+            <meta inertia name="description" content="{{ $page['props']['seo']['description'] }}">
+            <link inertia rel="canonical" href="{{ $page['props']['seo']['canonical'] }}">
+            <meta inertia property="og:title" content="{{ $page['props']['seo']['title'] }}">
+            <meta inertia property="og:description" content="{{ $page['props']['seo']['description'] }}">
+            <meta inertia property="og:url" content="{{ $page['props']['seo']['canonical'] }}">
+            <meta inertia property="og:type" content="website">
+        @endif
 
         <!-- Favicon -->
         <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('favicon-32.png') }}">
@@ -13,7 +21,7 @@
         <link rel="shortcut icon" href="{{ asset('favicon.ico') }}">
 
         <!-- PWA -->
-        <link rel="manifest" href="{{ asset('build/manifest.webmanifest') }}">
+        <link rel="manifest" href="{{ route('pwa.manifest') }}">
         <meta name="theme-color" content="#0a0a0a">
         <meta name="mobile-web-app-capable" content="yes">
         <meta name="apple-mobile-web-app-capable" content="yes">

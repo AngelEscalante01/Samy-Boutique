@@ -13,16 +13,20 @@ use App\Models\SalePayment;
 use App\Models\Setting;
 use App\Models\User;
 use App\Services\InventoryService;
+use App\Services\NotificationEventService;
+use App\Services\NotificationMessageFormatter;
+use App\Services\NotificationService;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class CreateSaleAction
 {
-    public function __construct(private readonly InventoryService $inventoryService)
-    {
-    }
+    public function __construct(
+        private readonly InventoryService $inventoryService,
+        private readonly NotificationService $notificationService,
+        private readonly NotificationEventService $systemNotifications,
+    ) {}
 
     /**
      * Crea una venta completa.
@@ -31,11 +35,13 @@ class CreateSaleAction
      * - Solo products.status = disponible
      * - Transacción DB
      * - Al finalizar: marcar products como vendido y sold_at
-     * - Si samy.delete_images_on_sale=true: borrar archivos y registros de product_images
+     * - Conservar imágenes; la limpieza diferida se gestiona fuera de la venta.
      */
     public function execute(array $payload, User $user): Sale
     {
-        return DB::transaction(function () use ($payload, $user) {
+        AssertGlobalDiscountQuantity::validate($payload);
+
+        $sale = DB::transaction(function () use ($payload, $user) {
             $itemsPayload = Arr::get($payload, 'items', []);
             $paymentsPayload = Arr::get($payload, 'payments', []);
 
@@ -156,7 +162,7 @@ class CreateSaleAction
                     ->lockForUpdate()
                     ->first();
 
-                if (!$coupon || !$coupon->active) {
+                if (! $coupon || ! $coupon->active) {
                     throw ValidationException::withMessages([
                         'coupon_code' => ['Cupón inválido o inactivo.'],
                     ]);
@@ -183,7 +189,9 @@ class CreateSaleAction
 
                 // Límites globales
                 if ($coupon->max_redemptions !== null) {
-                    $used = CouponRedemption::where('coupon_id', $coupon->id)->lockForUpdate()->count();
+                    $used = CouponRedemption::where('coupon_id', $coupon->id)
+                        ->whereHas('sale', fn ($query) => $query->where('status', 'completed'))
+                        ->lockForUpdate()->count();
                     if ($used >= $coupon->max_redemptions) {
                         throw ValidationException::withMessages([
                             'coupon_code' => ['El cupón alcanzó su límite de uso.'],
@@ -195,6 +203,7 @@ class CreateSaleAction
                 if ($customerId && $coupon->max_redemptions_per_customer !== null) {
                     $usedByCustomer = CouponRedemption::where('coupon_id', $coupon->id)
                         ->where('customer_id', $customerId)
+                        ->whereHas('sale', fn ($query) => $query->where('status', 'completed'))
                         ->lockForUpdate()
                         ->count();
 
@@ -243,21 +252,58 @@ class CreateSaleAction
                 }
             }
 
-            // Pagos
-            $paymentsSum = 0.0;
-            foreach ($paymentsPayload as $p) {
-                $paymentsSum += (float) $p['amount'];
+            // Pagos: normalizar montos para evitar errores por tipos, vacíos y precisión decimal.
+            $normalizedPayments = collect($paymentsPayload)
+                ->map(function ($payment) {
+                    return [
+                        'method' => strtolower(trim((string) Arr::get($payment, 'method', 'other'))),
+                        'amount' => $this->toMoneyFloat(Arr::get($payment, 'amount', 0)),
+                        'reference' => Arr::get($payment, 'reference'),
+                    ];
+                })
+                ->values();
+
+            $saleTotalRounded = round($this->toMoneyFloat($total), 2);
+
+            // Para pago unico, el backend fija el monto exacto del total para evitar desajustes por frontend cacheado.
+            if ($normalizedPayments->count() === 1) {
+                $singlePayment = $normalizedPayments->first();
+
+                if (is_array($singlePayment) && in_array($singlePayment['method'] ?? 'other', ['cash', 'card', 'transfer', 'other'], true)) {
+                    $singlePayment['amount'] = $saleTotalRounded;
+                    $normalizedPayments = collect([$singlePayment]);
+                }
             }
-            if (round($paymentsSum, 2) !== round($total, 2)) {
+
+            $paymentsSum = $normalizedPayments
+                ->sum(fn (array $payment) => round($payment['amount'], 2));
+
+            $paymentsTotalRounded = round($paymentsSum, 2);
+            $paymentsTotalCents = $this->toMoneyCents($paymentsTotalRounded);
+            $saleTotalCents = $this->toMoneyCents($saleTotalRounded);
+
+            $dineroRecibidoRaw = Arr::get($payload, 'dinero_recibido');
+            if ($dineroRecibidoRaw === null || $dineroRecibidoRaw === '') {
                 throw ValidationException::withMessages([
-                    'payments' => ['El total de pagos debe coincidir exactamente con el total de la venta.'],
+                    'dinero_recibido' => ['El dinero recibido es obligatorio.'],
                 ]);
             }
 
-            $cashReceived = round((float) Arr::get($payload, 'dinero_recibido', $paymentsSum), 2);
-            if ($cashReceived + 1e-9 < round($total, 2)) {
+            $dineroRecibido = round($this->toMoneyFloat($dineroRecibidoRaw), 2);
+            $dineroRecibidoCents = $this->toMoneyCents($dineroRecibido);
+
+            if ($dineroRecibidoCents < $saleTotalCents) {
                 throw ValidationException::withMessages([
-                    'dinero_recibido' => ['El dinero recibido no puede ser menor al total de la venta.'],
+                    'dinero_recibido' => ['El dinero recibido debe ser mayor o igual al total de la venta.'],
+                ]);
+            }
+
+            $cambioCents = max(0, $dineroRecibidoCents - $saleTotalCents);
+            $cambio = round($cambioCents / 100, 2);
+
+            if ($paymentsTotalCents !== $saleTotalCents) {
+                throw ValidationException::withMessages([
+                    'payments' => ['El total de pagos debe coincidir exactamente con el total de la venta.'],
                 ]);
             }
 
@@ -270,7 +316,8 @@ class CreateSaleAction
                 'loyalty_discount_total' => $loyaltyDiscountTotal,
                 'loyalty_applied' => $loyaltyApplied,
                 'total' => number_format($total, 2, '.', ''),
-                'cash_received' => number_format($cashReceived, 2, '.', ''),
+                'cash_received' => number_format($dineroRecibido, 2, '.', ''),
+                'change' => number_format($cambio, 2, '.', ''),
                 'global_discount_type' => $globalDiscountType,
                 'global_discount_value' => $globalDiscountValue,
                 'coupon_code' => $coupon ? $coupon->code : null,
@@ -302,12 +349,12 @@ class CreateSaleAction
                 ]);
             }
 
-            foreach ($paymentsPayload as $payment) {
+            foreach ($normalizedPayments as $payment) {
                 SalePayment::create([
                     'sale_id' => $sale->id,
                     'method' => $payment['method'],
-                    'amount' => $payment['amount'],
-                    'reference' => $payment['reference'] ?? null,
+                    'amount' => number_format($payment['amount'], 2, '.', ''),
+                    'reference' => $payment['reference'] ?: null,
                 ]);
             }
 
@@ -330,21 +377,9 @@ class CreateSaleAction
             $this->inventoryService->updateManySoldOutAt(
                 collect($computedItems)->pluck('product.id')->map(fn ($id) => (int) $id)
             );
-
-            if (config('samy.delete_images_on_sale', false)) {
-                $products = collect($computedItems)
-                    ->pluck('product')
-                    ->unique('id');
-
-                foreach ($products as $product) {
-                    if ($product->fresh()?->sold_out_at) {
-                        foreach ($product->images as $image) {
-                            Storage::disk('public')->delete($image->path);
-                            $image->delete();
-                        }
-                    }
-                }
-            }
+            app(\App\Services\ProductStockEpisodes::class)->recordConfirmedSale(
+                $sale, collect($computedItems)->pluck('variant.id')->map(fn ($id) => (int) $id)
+            );
 
             // Fidelidad: purchases_count cuenta ventas pagadas (esta venta es completed + pagos exactos)
             if ($customer) {
@@ -355,8 +390,18 @@ class CreateSaleAction
                 }
             }
 
+            [$title, $message] = app(NotificationMessageFormatter::class)->sale($sale);
+            $this->systemNotifications->forManagers(
+                'sale', $title, $message, 'sale', (int) $sale->id,
+                "/sales/{$sale->id}", 'normal', "sale:{$sale->id}", (int) $user->id,
+            );
+
             return $sale;
         });
+
+        $this->notificationService->notifySale($sale, $user);
+
+        return $sale;
     }
 
     private function normalizeDiscountType(string $type): ?string
@@ -397,11 +442,13 @@ class CreateSaleAction
         if ($type === 'percent') {
             $percent = min(100.0, max(0.0, $valueFloat));
             $amount = $baseAmount * ($percent / 100.0);
+
             return [$amount, 'percent', number_format($percent, 2, '.', '')];
         }
 
         if ($type === 'amount') {
             $amount = min($baseAmount, max(0.0, $valueFloat));
+
             return [$amount, 'amount', number_format($amount, 2, '.', '')];
         }
 
@@ -413,12 +460,12 @@ class CreateSaleAction
         $globalType = Arr::get($payload, 'global_discount_type');
         $globalValue = Arr::get($payload, 'global_discount_value');
 
-        if (!empty($globalType) && (float) $globalValue > 0) {
+        if (! empty($globalType) && (float) $globalValue > 0) {
             return true;
         }
 
         foreach (Arr::get($payload, 'items', []) as $item) {
-            if (!empty($item['discount_type']) && (float) ($item['discount_value'] ?? 0) > 0) {
+            if (! empty($item['discount_type']) && (float) ($item['discount_value'] ?? 0) > 0) {
                 return true;
             }
         }
@@ -479,5 +526,35 @@ class CreateSaleAction
         }
 
         return $discountValue > $maxAmount;
+    }
+
+    private function toMoneyFloat(mixed $value): float
+    {
+        if ($value === null || $value === '') {
+            return 0.0;
+        }
+
+        if (is_string($value)) {
+            $normalized = trim(str_replace(',', '.', $value));
+
+            if ($normalized === '' || ! is_numeric($normalized)) {
+                return 0.0;
+            }
+
+            return (float) $normalized;
+        }
+
+        if (is_numeric($value)) {
+            return (float) $value;
+        }
+
+        return 0.0;
+    }
+
+    private function toMoneyCents(mixed $value): int
+    {
+        $amount = round($this->toMoneyFloat($value), 2);
+
+        return (int) round($amount * 100, 0);
     }
 }

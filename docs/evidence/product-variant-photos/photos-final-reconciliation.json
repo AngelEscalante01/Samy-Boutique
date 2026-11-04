@@ -1,0 +1,26 @@
+{
+    "environment": "samy-android-qa-sqlite",
+    "checks": {
+        "offline_customer_created_once": true,
+        "mixed_sale_created_once": true,
+        "mixed_sale_payments_reconcile": true,
+        "uncertain_payment_created_once": true,
+        "liquidation_and_delivery_reconcile": true,
+        "stock_not_duplicated_by_recovery_or_reprint": true,
+        "native_product_and_variant_created": true,
+        "native_synthetic_photo_uploaded": true,
+        "fresh_excel_completed": true,
+        "stale_excel_rejected": true,
+        "firebase_notice_opened": true
+    },
+    "sales": 4,
+    "layaways": 2,
+    "payments": 3,
+    "operation_receipts": 15,
+    "stock": [
+        16,
+        18,
+        1
+    ],
+    "push_workers_enabled": false
+}

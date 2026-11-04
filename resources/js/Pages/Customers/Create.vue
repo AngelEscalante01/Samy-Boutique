@@ -8,8 +8,8 @@ function submit() { form.post(route('customers.store')) }
 <template>
   <Head title="Nuevo cliente" />
 
-  <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <div class="flex items-center gap-3 mb-6">
+  <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 app-page">
+    <div class="flex items-center gap-3 mb-6 app-heading">
       <Link :href="route('customers.index')" class="text-gray-400 hover:text-gray-600 transition">
         <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
@@ -18,7 +18,7 @@ function submit() { form.post(route('customers.store')) }
       <h1 class="text-2xl font-bold text-gray-900">Nuevo cliente</h1>
     </div>
 
-    <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-100 space-y-5">
+    <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-100 space-y-5 app-surface">
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1.5">Nombre <span class="text-red-500">*</span></label>
         <input v-model="form.name" type="text" placeholder="Nombre completo"

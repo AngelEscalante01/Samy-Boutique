@@ -16,7 +16,7 @@ const METHODS = [
 </script>
 
 <template>
-  <div class="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-200">
+  <div class="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-200 app-surface">
     <div class="px-5 py-3 border-b border-gray-100 bg-gray-50/50">
       <h3 class="text-sm font-semibold text-gray-700">Desglose por método de pago</h3>
     </div>

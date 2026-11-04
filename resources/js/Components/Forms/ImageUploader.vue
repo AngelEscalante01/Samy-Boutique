@@ -65,10 +65,10 @@ defineExpose({ reset });
 </script>
 
 <template>
-    <div class="space-y-3">
+    <div class="space-y-3 app-card-stack">
         <!-- Drop zone -->
         <div
-            class="relative flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors"
+            class="relative flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-8 text-center transition-colors app-surface"
             :class="dragging
                 ? 'border-gray-400 bg-gray-50'
                 : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'"
@@ -98,11 +98,11 @@ defineExpose({ reset });
         <p v-if="error" class="text-xs text-red-600">{{ error }}</p>
 
         <!-- Previews grid -->
-        <div v-if="previews.length" class="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5">
+        <div v-if="previews.length" class="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 app-card-grid">
             <div
                 v-for="(p, idx) in previews"
                 :key="p.url"
-                class="group relative overflow-hidden rounded-xl border border-gray-100 bg-gray-50"
+                class="group relative overflow-hidden rounded-xl border border-gray-100 bg-gray-50 app-surface"
             >
                 <img :src="p.url" :alt="p.name" class="aspect-square w-full object-cover" />
 

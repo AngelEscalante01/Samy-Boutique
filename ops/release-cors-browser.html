@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Samy · Validación privada de imágenes</title>
+<style>body{font:18px system-ui;max-width:760px;margin:48px auto;padding:20px;background:#fafafa;color:#18181b}button{background:#18181b;color:white;border:0;border-radius:12px;padding:14px 20px;font:inherit}pre{white-space:pre-wrap;background:white;padding:20px;border:1px solid #ddd}img{width:96px;height:96px;image-rendering:pixelated}small{color:#666}</style>
+<h1>Samy Boutique · Imágenes listas para uso sin conexión</h1>
+<p>Comprobación privada con una imagen sintética. Usa el código real de precarga de la web.</p>
+<button id="run">Comprobar imagen y caché</button>
+<pre id="result">Pendiente de ejecutar.</pre><img id="proof" hidden alt="Imagen sintética recuperada de la caché">
+<p><small>No inicia sesión, no accede a datos comerciales y no registra ventas ni pagos.</small></p>
+<script type="module">
+import { prefetchProductImages, PRODUCT_IMAGE_CACHE } from './release-image-cache-policy.js';
+const url='https://imagenes.samyboutique.com.mx/samy/products/0/00000000-0000-4000-8000-202611010001.png';
+document.getElementById('run').addEventListener('click',async()=>{
+ const output=document.getElementById('result'); output.textContent='Verificando lectura HTTPS y caché local…';
+ try {
+  const result=await prefetchProductImages([{image_url:url}],{appOrigin:location.origin,publicBase:'https://imagenes.samyboutique.com.mx'});
+  if(result.cached!==1||result.failed!==0)throw new Error('La precarga no pudo guardar la imagen.');
+  const cache=await caches.open(PRODUCT_IMAGE_CACHE); const response=await cache.match(url);
+  if(!response||response.status!==200)throw new Error('No se recuperó la copia local.');
+  const blob=await response.blob(); const preview=document.getElementById('proof'); preview.src=URL.createObjectURL(blob); preview.hidden=false;
+  output.textContent='CORRECTO\nImagen pública por HTTPS: recibida.\nCaché local: 1 imagen guardada y recuperada.\nTipo: '+blob.type+'\nBytes recuperados: '+blob.size+'\nErrores: 0\nDatos comerciales utilizados: ninguno.';
+  document.documentElement.dataset.passed='true';
+ }catch(error){output.textContent='FALLO: '+error.message;document.documentElement.dataset.passed='false';}
+});
+</script></html>

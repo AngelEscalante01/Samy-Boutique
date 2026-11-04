@@ -1,0 +1,17 @@
+{
+  "created_via_form": true,
+  "uploaded_synthetic_photos": 3,
+  "variants": 2,
+  "public_photos_before": 3,
+  "public_photos_after_red_stock_zero": 2,
+  "red_hidden": true,
+  "blue_visible": true,
+  "shared_visible": true,
+  "photos_restored": 3,
+  "red_visible_after_restock": true,
+  "mobile": {
+    "document": 386,
+    "viewport": 386,
+    "variantCards": 2
+  }
+}

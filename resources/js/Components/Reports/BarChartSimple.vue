@@ -36,7 +36,7 @@ function money(v) {
         <!-- Tooltip emergente -->
         <div class="absolute bottom-full mb-1.5 left-1/2 -translate-x-1/2
                     hidden group-hover:flex flex-col items-center pointer-events-none z-10">
-          <div class="rounded-lg bg-gray-900 px-2.5 py-1.5 text-xs text-white whitespace-nowrap shadow-lg">
+          <div class="rounded-lg bg-gray-900 px-2.5 py-1.5 text-xs text-white whitespace-nowrap shadow-lg app-surface">
             <span class="font-semibold">{{ d.label }}</span><br />
             ${{ money(d.value) }}
           </div>

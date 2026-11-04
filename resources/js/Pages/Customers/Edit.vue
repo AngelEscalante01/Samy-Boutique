@@ -1,5 +1,6 @@
 <script setup>
-import { Head, Link, useForm } from '@inertiajs/vue3'
+import { Head, Link, router, useForm } from '@inertiajs/vue3'
+import { ref } from 'vue'
 
 const props = defineProps({ customer: { type: Object, required: true } })
 
@@ -11,13 +12,31 @@ const form = useForm({
 })
 
 function submit() { form.put(route('customers.update', props.customer.id)) }
+const photo = ref(null)
+const photoError = ref('')
+
+function uploadPhoto() {
+  if (!photo.value) return
+  photoError.value = ''
+  router.post(route('customers.photo.store', props.customer.id), { photo: photo.value }, {
+    forceFormData: true, preserveScroll: true,
+    onError: (errors) => { photoError.value = errors.photo ?? 'No se pudo subir la fotografía.' },
+    onSuccess: () => { photo.value = null },
+  })
+}
+
+function deletePhoto() {
+  if (window.confirm('¿Eliminar la fotografía de este cliente?')) {
+    router.delete(route('customers.photo.destroy', props.customer.id), { preserveScroll: true })
+  }
+}
 </script>
 
 <template>
   <Head :title="'Editar: ' + (customer.name ?? 'Cliente')" />
 
-  <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-    <div class="flex items-center gap-3 mb-6">
+  <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8 app-page">
+    <div class="flex items-center gap-3 mb-6 app-heading">
       <Link :href="route('customers.show', customer.id)" class="text-gray-400 hover:text-gray-600 transition">
         <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
@@ -29,7 +48,23 @@ function submit() { form.put(route('customers.update', props.customer.id)) }
       </div>
     </div>
 
-    <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-100 space-y-5">
+    <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-100 space-y-5 app-surface">
+      <section class="border-b border-gray-100 pb-5">
+        <h2 class="text-sm font-semibold text-gray-700">Fotografía privada del cliente</h2>
+        <div class="mt-2 flex items-center gap-3">
+          <img v-if="customer.photo_url" :src="customer.photo_url" :alt="`Foto de ${customer.name}`" class="h-16 w-16 rounded-full object-cover">
+          <div v-else class="flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 text-xl text-gray-500">{{ customer.name?.charAt(0) }}</div>
+          <div>
+            <input type="file" accept="image/jpeg,image/png,image/webp" capture="user" class="block max-w-full text-xs" @change="photo = $event.target.files?.[0] ?? null">
+            <p v-if="photoError" class="text-xs text-red-600">{{ photoError }}</p>
+            <div class="mt-2 flex gap-3">
+              <button type="button" :disabled="!photo" class="text-xs font-semibold text-stone-800 underline disabled:opacity-40" @click="uploadPhoto">Subir fotografía</button>
+              <button v-if="customer.photo_url" type="button" class="text-xs font-semibold text-red-700 underline" @click="deletePhoto">Eliminar</button>
+            </div>
+          </div>
+        </div>
+        <p class="mt-2 text-xs text-gray-500">Solo el personal autorizado puede verla. Máximo 4 MB.</p>
+      </section>
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1.5">Nombre <span class="text-red-500">*</span></label>
         <input v-model="form.name" type="text" placeholder="Nombre completo"

@@ -1,0 +1,25 @@
+{
+  "date": "2026-11-01",
+  "scope": "production migration reconciliation; read-only business audit",
+  "business_tables_checked": 32,
+  "unexpected_business_changes": [],
+  "products_api_checked": 527,
+  "variants_api_checked": 945,
+  "barcode_previews_checked": 945,
+  "api_field_errors": [],
+  "barcode_errors": [],
+  "media_references_checked": 2375,
+  "missing_media": [],
+  "media_size_mismatches": [],
+  "pending_migrations": [],
+  "role_permission_differences": [],
+  "logo_path_corrected": true,
+  "production_apk_hash_verified": true,
+  "production_https_verified": true,
+  "final_backup_restore_hashes_verified": true,
+  "final_backup_files": 3984,
+  "automatic_photo_deletions": false,
+  "pending_acceptance": [
+    "Physical ticket printer of customer"
+  ]
+}

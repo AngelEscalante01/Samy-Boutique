@@ -1,0 +1,13 @@
+**
+!composer.json
+!composer.lock
+!phpunit.xml
+!tests/**
+!resources/js/**
+!database/factories/**
+!docker/release/Dockerfile.test
+**/.env*
+**/*.private*
+**/*.pem
+**/*credentials*.json
+**/*service-account*.json

@@ -1,0 +1,134 @@
+TAP version 13
+# Subtest: public HTTPS URL and explicit loopback development hosts are accepted without credentials or signatures
+ok 1 - public HTTPS URL and explicit loopback development hosts are accepted without credentials or signatures
+  ---
+  duration_ms: 10.654506
+  type: 'test'
+  ...
+# Subtest: local MinIO and showcase product photos follow the same public-only cache policy
+ok 2 - local MinIO and showcase product photos follow the same public-only cache policy
+  ---
+  duration_ms: 21.352215
+  type: 'test'
+  ...
+# Subtest: migrated extensionless objects and UUID uploads match the same Workbox rule
+ok 3 - migrated extensionless objects and UUID uploads match the same Workbox rule
+  ---
+  duration_ms: 2.88743
+  type: 'test'
+  ...
+# Subtest: same-origin legacy files remain supported while foreign storage URLs are rejected
+ok 4 - same-origin legacy files remain supported while foreign storage URLs are rejected
+  ---
+  duration_ms: 10.726683
+  type: 'test'
+  ...
+# Subtest: remote prefetch omits credentials, rejects redirects and deduplicates variants
+ok 5 - remote prefetch omits credentials, rejects redirects and deduplicates variants
+  ---
+  duration_ms: 221.084286
+  type: 'test'
+  ...
+# Subtest: CORS failure, HTTP errors and non-image bodies are not reported as cached
+ok 6 - CORS failure, HTTP errors and non-image bodies are not reported as cached
+  ---
+  duration_ms: 3.517395
+  type: 'test'
+  ...
+# Subtest: absent cache API never claims offline readiness and cache volume is bounded
+ok 7 - absent cache API never claims offline readiness and cache volume is bounded
+  ---
+  duration_ms: 160.143288
+  type: 'test'
+  ...
+# Subtest: cache cap evicts old snapshot URLs instead of refreshed current images
+ok 8 - cache cap evicts old snapshot URLs instead of refreshed current images
+  ---
+  duration_ms: 178.157446
+  type: 'test'
+  ...
+# Subtest: legacy, general and shared saved photos retain their associations
+ok 9 - legacy, general and shared saved photos retain their associations
+  ---
+  duration_ms: 25.824749
+  type: 'test'
+  ...
+# Subtest: a shared photo stays visible until its last associated variant is unavailable
+ok 10 - a shared photo stays visible until its last associated variant is unavailable
+  ---
+  duration_ms: 1.714151
+  type: 'test'
+  ...
+# Subtest: choosing a variant replaces general scope and clearing the last choice requires an explicit new scope
+ok 11 - choosing a variant replaces general scope and clearing the last choice requires an explicit new scope
+  ---
+  duration_ms: 11.872574
+  type: 'test'
+  ...
+# [notificaciones] Service worker activo para FCM. {
+#   scope: 'http://localhost/',
+#   scriptURL: null,
+#   state: null,
+#   controllerScriptURL: null,
+#   workerResponse: 'unavailable'
+# }
+# [notificaciones] Service worker activo para FCM. {
+#   scope: 'http://localhost/',
+#   scriptURL: null,
+#   state: null,
+#   controllerScriptURL: null,
+#   workerResponse: 'unavailable'
+# }
+# [notificaciones] No se pudo obtener el token web. error
+# [notificaciones] Service worker activo para FCM. {
+#   scope: 'http://localhost/',
+#   scriptURL: null,
+#   state: null,
+#   controllerScriptURL: null,
+#   workerResponse: 'unavailable'
+# }
+# Subtest: push registration only reports enabled after obtaining and saving an FCM token
+ok 12 - push registration only reports enabled after obtaining and saving an FCM token
+  ---
+  duration_ms: 90.090492
+  type: 'test'
+  ...
+# Subtest: permission alone never reports a linked device when FCM fails or returns no token
+ok 13 - permission alone never reports a linked device when FCM fails or returns no token
+  ---
+  duration_ms: 53.315992
+  type: 'test'
+  ...
+# Subtest: denied permission is preserved without claiming push delivery is enabled
+ok 14 - denied permission is preserved without claiming push delivery is enabled
+  ---
+  duration_ms: 17.372735
+  type: 'test'
+  ...
+# Subtest: browser checkout offers a receipt without opening popups or reporting an Android failure
+ok 15 - browser checkout offers a receipt without opening popups or reporting an Android failure
+  ---
+  duration_ms: 8.203804
+  type: 'test'
+  ...
+# Subtest: explicit browser printing opens the authorized receipt and handles blocked popups
+ok 16 - explicit browser printing opens the authorized receipt and handles blocked popups
+  ---
+  duration_ms: 23.543673
+  type: 'test'
+  ...
+# Subtest: native printing still obtains the ticket, records an attempt and sends to the Android bridge
+ok 17 - native printing still obtains the ticket, records an attempt and sends to the Android bridge
+  ---
+  duration_ms: 16.730668
+  type: 'test'
+  ...
+1..17
+# tests 17
+# suites 0
+# pass 17
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1259.547921

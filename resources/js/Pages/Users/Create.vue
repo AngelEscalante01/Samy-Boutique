@@ -23,7 +23,7 @@ function submit() {
 <template>
   <Head title="Nuevo usuario" />
 
-  <div class="mx-auto max-w-2xl px-4 py-8 sm:px-6 lg:px-8 space-y-6">
+  <div class="mx-auto max-w-2xl px-4 py-8 sm:px-6 lg:px-8 space-y-6 app-card-stack app-page">
 
     <!-- ── Breadcrumb ──────────────────────────────────────────────────────── -->
     <nav class="flex items-center gap-2 text-sm text-gray-500">
@@ -38,14 +38,14 @@ function submit() {
       <span class="font-medium text-gray-700">Nuevo</span>
     </nav>
 
-    <div>
+    <div class="app-heading">
       <h1 class="text-2xl font-bold text-gray-900">Nuevo usuario</h1>
       <p class="mt-1 text-sm text-gray-500">Crea un acceso al sistema</p>
     </div>
 
     <!-- ── Formulario ─────────────────────────────────────────────────────── -->
-    <form @submit.prevent="submit" class="space-y-5">
-      <div class="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-200">
+    <form @submit.prevent="submit" class="space-y-5 app-card-stack">
+      <div class="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-200 app-surface">
 
         <!-- Sección A: Datos del usuario -->
         <div class="border-b border-gray-100 bg-gray-50/50 px-5 py-3">

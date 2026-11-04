@@ -1,0 +1,14 @@
+[
+  {
+    "AllowedOrigins": [
+      "https://samyboutique.com.mx",
+      "https://www.samyboutique.com.mx",
+      "https://sistema.samyboutique.com.mx",
+      "http://127.0.0.1:18181"
+    ],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["Range"],
+    "ExposeHeaders": ["ETag", "Content-Length", "Content-Type", "Cache-Control"],
+    "MaxAgeSeconds": 3600
+  }
+]

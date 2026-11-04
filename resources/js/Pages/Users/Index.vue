@@ -45,7 +45,7 @@ function toggleActive(user) {
 <template>
   <Head title="Usuarios" />
 
-  <div class="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8 space-y-6">
+  <div class="mx-auto max-w-5xl px-4 py-8 sm:px-6 lg:px-8 space-y-6 app-card-stack app-page">
 
     <!-- ── Breadcrumb ──────────────────────────────────────────────────────── -->
     <nav class="flex items-center gap-2 text-sm text-gray-500">
@@ -57,7 +57,7 @@ function toggleActive(user) {
     </nav>
 
     <!-- ── Encabezado ─────────────────────────────────────────────────────── -->
-    <div class="flex items-center justify-between gap-4">
+    <div class="flex items-center justify-between gap-4 app-heading">
       <div>
         <h1 class="text-2xl font-bold text-gray-900">Usuarios</h1>
         <p class="mt-1 text-sm text-gray-500">Gestiona los accesos al sistema</p>
@@ -84,7 +84,7 @@ function toggleActive(user) {
       leave-to-class="opacity-0"
     >
       <div v-if="flash.success"
-           class="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+           class="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 app-surface">
         <svg class="h-4 w-4 flex-shrink-0 mt-0.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
         </svg>
@@ -101,7 +101,7 @@ function toggleActive(user) {
       leave-to-class="opacity-0"
     >
       <div v-if="flash.error"
-           class="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+           class="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 app-surface">
         <svg class="h-4 w-4 flex-shrink-0 mt-0.5 text-red-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
         </svg>
@@ -153,7 +153,7 @@ function toggleActive(user) {
     </div>
 
     <!-- ── Card principal ─────────────────────────────────────────────────── -->
-    <div class="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-200">
+    <div class="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-200 app-surface">
 
       <!-- Tabla Desktop -->
       <div class="hidden sm:block overflow-x-auto">

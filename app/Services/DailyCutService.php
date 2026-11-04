@@ -23,10 +23,8 @@ class DailyCutService
             ->selectRaw('COALESCE(SUM(coupon_discount_total),0) as coupon_discount_sum')
             ->selectRaw('COALESCE(SUM(loyalty_discount_total),0) as loyalty_discount_sum')
             ->selectRaw('COALESCE(SUM(total),0) as total_sum')->first();
-        $payments = DB::table('sale_payments')->join('sales','sale_payments.sale_id','=','sales.id')
-            ->where('sales.status','completed')->whereBetween('sales.created_at',[$start,$end])->groupBy('sale_payments.method')
-            ->selectRaw('sale_payments.method as method, COALESCE(SUM(sale_payments.amount),0) as amount')->get()
-            ->mapWithKeys(fn ($r) => [$r->method => number_format((float)$r->amount,2,'.','')])->all();
+        $payments = collect(app(SalesAnalyticsService::class)->buildDailyCutMetrics($date)['summary']['payments'])
+            ->map(fn ($amount) => number_format((float) $amount, 2, '.', ''))->all();
         foreach (['cash','card','transfer','other'] as $method) $payments[$method] ??= '0.00';
         $topProducts = DB::table('sale_items')->join('sales','sale_items.sale_id','=','sales.id')->where('sales.status','completed')
             ->whereBetween('sales.created_at',[$start,$end])->groupBy('sale_items.product_id','sale_items.sku','sale_items.name')

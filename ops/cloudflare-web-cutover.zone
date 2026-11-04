@@ -1,0 +1,6 @@
+; Prepared only. Import/create after final cutover approval.
+; Initially DNS only; enable proxy after valid origin certificates exist.
+$ORIGIN samyboutique.com.mx.
+@        300 IN A     2.25.126.224
+sistema  300 IN A     2.25.126.224
+www      300 IN CNAME samyboutique.com.mx.

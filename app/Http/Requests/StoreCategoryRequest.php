@@ -15,6 +15,7 @@ class StoreCategoryRequest extends FormRequest
     {
         return [
             'name' => ['required', 'string', 'min:2', 'max:80', 'unique:categories,name'],
+            'sku_prefix' => ['nullable', 'string', 'regex:/^[A-Za-z][A-Za-z0-9]{1,11}$/'],
             'active' => ['required', 'boolean'],
         ];
     }

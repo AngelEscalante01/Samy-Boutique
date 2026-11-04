@@ -1,0 +1,14 @@
+[Unit]
+Description=Samy Boutique encrypted backup to private R2
+After=docker.service network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/home/angel/samy-release-20261101
+ExecStart=/usr/bin/python3 /usr/local/lib/samy-backup/release-backup.py --release-directory /home/angel/samy-release-20261101 --tools-directory /usr/local/lib/samy-backup
+ExecStopPost=/usr/bin/python3 /usr/local/lib/samy-backup/release-backup.py --release-directory /home/angel/samy-release-20261101 --resume-only
+TimeoutStartSec=1800
+Nice=10
+UMask=0077

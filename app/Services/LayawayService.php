@@ -15,20 +15,24 @@ use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class LayawayService
 {
-    public function __construct(private readonly InventoryService $inventoryService)
-    {
-    }
+    public function __construct(
+        private readonly InventoryService $inventoryService,
+        private readonly NotificationService $notificationService,
+        private readonly NotificationEventService $systemNotifications,
+    ) {}
 
     public function create(array $payload, User $user): Layaway
     {
-        return DB::transaction(function () use ($payload, $user) {
+        $layaway = DB::transaction(function () use ($payload, $user) {
             $customerId = Arr::get($payload, 'customer_id');
             $customerId = $customerId !== null ? (int) $customerId : null;
+            $rawVigenciaDias = Arr::get($payload, 'vigencia_dias');
+            $vigenciaDias = max(1, (int) ($rawVigenciaDias ?? config('firebase.layaway_expiry_days', 30)));
+            $explicitDate = Arr::get($payload, 'fecha_vencimiento');
 
             $itemsPayload = Arr::get($payload, 'items', []);
             $variantIds = collect($itemsPayload)
@@ -82,12 +86,28 @@ class LayawayService
                 $subtotal = bcadd($subtotal, number_format($lineTotal, 2, '.', ''), 2);
             }
 
+            $discountType = $payload['global_discount_type'] ?? null;
+            $discountValue = (float) ($payload['global_discount_value'] ?? 0);
+            ManualDiscountPermission::assertAllowed($user, $discountType, $discountValue);
+            $unitCount = collect($itemsPayload)->sum(fn ($item) => (int) ($item['qty'] ?? 0));
+            if ($discountValue > 0 && ($unitCount < 2 || ! in_array($discountType, ['percent', 'amount'], true))) {
+                throw ValidationException::withMessages(['global_discount_value' => 'El descuento global requiere al menos dos unidades y un tipo válido.']);
+            }
+            $manualDiscount = $discountValue > 0 ? round($this->computeDiscountAmount((float) $subtotal, $discountType, $discountValue), 2) : 0.0;
+
             $layaway = Layaway::create([
                 'customer_id' => $customer?->id,
                 'created_by' => (int) $user->id,
                 'status' => 'open',
                 'subtotal' => $subtotal,
+                'global_discount_type' => $manualDiscount > 0 ? $discountType : null,
+                'global_discount_value' => $manualDiscount > 0 ? $discountValue : null,
+                'manual_discount_total' => number_format($manualDiscount, 2, '.', ''),
                 'paid_total' => '0.00',
+                'vigencia_dias' => $explicitDate !== null && $rawVigenciaDias === null ? null : $vigenciaDias,
+                'fecha_vencimiento' => $explicitDate ?? now()->startOfDay()->addDays($vigenciaDias)->toDateString(),
+                'observaciones' => Arr::get($payload, 'observaciones'),
+                'delivery_tracking_enabled' => true,
             ]);
 
             foreach ($itemsPayload as $item) {
@@ -119,29 +139,89 @@ class LayawayService
             // Pago inicial opcional
             $paymentsPayload = Arr::get($payload, 'payments', []);
             foreach ($paymentsPayload as $payment) {
-                $this->addPaymentInternal($layaway, $payment);
+                $this->addPaymentInternal($layaway, array_merge($payment, [
+                    'created_by' => (int) $user->id,
+                ]));
             }
+
+            [$title, $message] = app(NotificationMessageFormatter::class)->layaway($layaway);
+            $this->systemNotifications->forManagers(
+                'layaway', $title, $message, 'layaway', (int) $layaway->id,
+                "/layaways/{$layaway->id}", 'normal', "layaway:{$layaway->id}", (int) $user->id,
+            );
 
             return $layaway->fresh(['items.product', 'items.variant.size', 'items.variant.color', 'payments', 'customer', 'creator']);
         });
+
+        $this->notificationService->notifyLayawayCreated($layaway, $user);
+
+        return $layaway;
     }
 
-    public function addPayment(Layaway $layaway, array $payload): LayawayPayment
+    public function updateVigencia(Layaway $layaway, int $vigenciaDias): Layaway
     {
-        return DB::transaction(function () use ($layaway, $payload) {
+        return DB::transaction(function () use ($layaway, $vigenciaDias) {
             /** @var Layaway $locked */
             $locked = Layaway::query()->lockForUpdate()->findOrFail($layaway->id);
 
             if ($locked->status !== 'open') {
                 throw ValidationException::withMessages([
-                    'layaway' => ['Solo se puede abonar a un apartado abierto.'],
+                    'layaway' => ['La vigencia solo se puede modificar en apartados abiertos.'],
                 ]);
             }
 
-            $payment = $this->addPaymentInternal($locked, $payload);
+            $baseDate = $locked->created_at?->copy()->startOfDay() ?? now()->startOfDay();
+
+            $locked->update([
+                'vigencia_dias' => $vigenciaDias,
+                'fecha_vencimiento' => $baseDate->addDays($vigenciaDias)->toDateString(),
+            ]);
+
+            return $locked->fresh(['items.product', 'items.variant.size', 'items.variant.color', 'payments', 'customer', 'creator', 'sale']);
+        });
+    }
+
+    public function addPayment(Layaway $layaway, array $payload, ?User $user = null): LayawayPayment
+    {
+        $payment = DB::transaction(function () use ($layaway, $payload, $user) {
+            /** @var Layaway $locked */
+            $locked = Layaway::query()->lockForUpdate()->findOrFail($layaway->id);
+
+            if ($locked->status !== 'open' && ! ($locked->status === 'liquidated' && $locked->delivery_tracking_enabled && ! $locked->delivered_at && $locked->sale?->status === 'completed')) {
+                throw ValidationException::withMessages([
+                    'layaway' => ['Solo se puede abonar a un apartado abierto o pendiente de entrega.'],
+                ]);
+            }
+
+            $payment = $this->addPaymentInternal($locked, array_merge($payload, [
+                'created_by' => $user?->id,
+            ]));
+            if ($locked->status === 'liquidated' && $locked->sale_id) {
+                SalePayment::create([
+                    'sale_id' => $locked->sale_id,
+                    'method' => $payment->method,
+                    'amount' => $payment->amount,
+                    'reference' => $payment->reference,
+                ]);
+            }
+
+            if ($user !== null) {
+                [$title, $message] = app(NotificationMessageFormatter::class)->layawayPayment($locked, $payment);
+                $this->systemNotifications->forManagers(
+                    'layaway_payment', $title, $message, 'layaway', (int) $locked->id,
+                    "/layaways/{$locked->id}", 'normal', "layaway-payment:{$payment->id}", (int) $user->id,
+                );
+            }
 
             return $payment;
         });
+
+        if ($user !== null) {
+            $layaway->refresh();
+            $this->notificationService->notifyLayawayPayment($layaway, $payment, $user);
+        }
+
+        return $payment;
     }
 
     public function cancel(Layaway $layaway): Layaway
@@ -188,6 +268,12 @@ class LayawayService
                 'cancelled_at' => now(),
             ]);
 
+            [$title, $message] = app(NotificationMessageFormatter::class)->cancelledLayaway($locked);
+            $this->systemNotifications->forManagers(
+                'layaway', $title, $message, 'layaway', (int) $locked->id,
+                "/layaways/{$locked->id}", 'high', "layaway-cancelled:{$locked->id}",
+            );
+
             return $locked->fresh(['items.product', 'items.variant.size', 'items.variant.color', 'payments', 'customer', 'creator']);
         });
     }
@@ -203,17 +289,20 @@ class LayawayService
      */
     public function liquidate(Layaway $layaway, array $payload, User $user): Sale
     {
-        return DB::transaction(function () use ($layaway, $payload, $user) {
+        $sale = DB::transaction(function () use ($layaway, $payload, $user) {
             /** @var Layaway $locked */
             $locked = Layaway::query()
                 ->lockForUpdate()
-                ->with(['items', 'payments', 'customer'])
+                ->with(['items', 'payments', 'refunds', 'customer'])
                 ->findOrFail($layaway->id);
 
             if ($locked->status !== 'open') {
                 throw ValidationException::withMessages([
                     'layaway' => ['Solo se puede liquidar un apartado abierto.'],
                 ]);
+            }
+            if (bccomp((string) $locked->excess, '0.00', 2) > 0) {
+                throw ValidationException::withMessages(['layaway' => 'Devuelve el excedente antes de liquidar el apartado.']);
             }
 
             $customer = null;
@@ -236,8 +325,9 @@ class LayawayService
                 ->keyBy('id');
 
             $subtotal = (float) $locked->subtotal;
-            $paidTotal = (float) $locked->paid_total;
-            $remaining = max(0, round($subtotal - $paidTotal, 2));
+            $manualDiscount = (float) $locked->manual_discount_total;
+            $paidTotal = (float) $locked->applied_total;
+            $remaining = max(0, round((float) $locked->total - $paidTotal, 2));
 
             // Fidelidad sobre saldo restante
             $loyaltyApplied = false;
@@ -267,6 +357,7 @@ class LayawayService
                         'method' => (string) ($payment['method'] ?? 'cash'),
                         'amount' => round((float) ($payment['amount'] ?? 0), 2),
                         'reference' => $payment['reference'] ?? null,
+                        'payer_name' => $payment['payer_name'] ?? null,
                     ];
                 })
                 ->filter(fn ($payment) => $payment['amount'] > 0)
@@ -284,19 +375,21 @@ class LayawayService
                 ]);
             }
 
-            $total = round($subtotal - $loyaltyDiscountTotal, 2);
+            $total = round($subtotal - $manualDiscount - $loyaltyDiscountTotal, 2);
+
+            $locked->update(['loyalty_discount_total' => number_format($loyaltyDiscountTotal, 2, '.', '')]);
 
             $sale = Sale::create([
                 'customer_id' => $locked->customer_id,
                 'created_by' => (int) $user->id,
                 'subtotal' => number_format($subtotal, 2, '.', ''),
-                'discount_total' => number_format($loyaltyDiscountTotal, 2, '.', ''),
+                'discount_total' => number_format($manualDiscount + $loyaltyDiscountTotal, 2, '.', ''),
                 'coupon_discount_total' => '0.00',
                 'loyalty_discount_total' => number_format($loyaltyDiscountTotal, 2, '.', ''),
                 'loyalty_applied' => $loyaltyApplied,
                 'total' => number_format($total, 2, '.', ''),
-                'global_discount_type' => null,
-                'global_discount_value' => null,
+                'global_discount_type' => $locked->global_discount_type,
+                'global_discount_value' => $locked->global_discount_value,
                 'coupon_code' => null,
                 'coupon_id' => null,
                 'status' => 'completed',
@@ -340,8 +433,24 @@ class LayawayService
                 ]);
             }
 
+            foreach ($locked->refunds as $refund) {
+                if ($refund->status !== 'confirmed') continue;
+                $paymentsTotal -= (float) $refund->amount;
+                SalePayment::create([
+                    'sale_id' => $sale->id,
+                    'method' => $refund->method,
+                    'amount' => bcsub('0.00', (string) $refund->amount, 2),
+                    'reference' => 'Devolución AP-'.$locked->id.($refund->reference ? ' '.$refund->reference : ''),
+                ]);
+            }
+
             foreach ($finalPayments as $p) {
                 $paymentsTotal += (float) $p['amount'];
+
+                $this->addPaymentInternal($locked, array_merge($p, [
+                    'created_by' => $user->id,
+                    'observacion' => 'Liquidación del apartado',
+                ]));
 
                 SalePayment::create([
                     'sale_id' => $sale->id,
@@ -367,6 +476,20 @@ class LayawayService
                 'sale_id' => $sale->id,
                 'liquidated_at' => now(),
             ]);
+            app(ProductStockEpisodes::class)->recordConfirmedSale(
+                $sale, $locked->items->pluck('product_variant_id')->filter()->map(fn ($id) => (int) $id)
+            );
+
+            [$saleTitle, $saleMessage] = app(NotificationMessageFormatter::class)->sale($sale, 'Compra de apartado');
+            $this->systemNotifications->forManagers(
+                'sale', $saleTitle, $saleMessage, 'sale', (int) $sale->id,
+                "/sales/{$sale->id}", 'normal', "sale:{$sale->id}", (int) $user->id,
+            );
+            [$title, $message] = app(NotificationMessageFormatter::class)->liquidatedLayaway($locked, $sale);
+            $this->systemNotifications->forManagers(
+                'layaway_liquidated', $title, $message, 'layaway', (int) $locked->id,
+                "/layaways/{$locked->id}", 'normal', "layaway-liquidated:{$locked->id}", (int) $user->id,
+            );
 
             // Fidelidad: purchases_count cuenta ventas pagadas
             if ($customer) {
@@ -379,6 +502,10 @@ class LayawayService
 
             return $sale->fresh(['items', 'payments', 'customer', 'creator']);
         });
+
+        $this->notificationService->notifySale($sale, $user);
+
+        return $sale;
     }
 
     private function addPaymentInternal(Layaway $layaway, array $payload): LayawayPayment
@@ -407,9 +534,12 @@ class LayawayService
 
         $payment = LayawayPayment::create([
             'layaway_id' => $layaway->id,
+            'created_by' => isset($payload['created_by']) ? (int) $payload['created_by'] : null,
             'method' => $method,
             'amount' => number_format($amount, 2, '.', ''),
             'reference' => $payload['reference'] ?? null,
+            'observacion' => $payload['observacion'] ?? null,
+            'payer_name' => trim((string) ($payload['payer_name'] ?? '')) ?: ($layaway->customer?->name ?: null),
             'paid_at' => $payload['paid_at'] ?? now(),
         ]);
 
@@ -439,6 +569,7 @@ class LayawayService
 
         if ($type === 'percent') {
             $percent = min(100.0, max(0.0, $value));
+
             return $baseAmount * ($percent / 100.0);
         }
 

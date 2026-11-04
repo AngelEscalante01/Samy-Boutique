@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Product extends Model
@@ -31,6 +32,7 @@ class Product extends Model
         'created_by',
         'sold_at',
         'sold_out_at',
+        'catalog_published',
     ];
 
     protected $casts = [
@@ -40,6 +42,7 @@ class Product extends Model
         'sale_price_base' => 'decimal:2',
         'sold_at' => 'datetime',
         'sold_out_at' => 'datetime',
+        'catalog_published' => 'boolean',
     ];
 
     /**
@@ -69,12 +72,18 @@ class Product extends Model
     {
         return $this->hasMany(ProductImage::class)
             ->whereNull('deleted_at')
+            ->with('derivatives')
             ->orderBy('sort');
     }
 
     public function variants(): HasMany
     {
         return $this->hasMany(ProductVariant::class);
+    }
+
+    public function occasions(): BelongsToMany
+    {
+        return $this->belongsToMany(Occasion::class);
     }
 
     /**
@@ -110,7 +119,7 @@ class Product extends Model
     }
 
     /**
-     * Búsqueda simple (SKU, nombre y descripción).
+     * Búsqueda por SKU de producto o variante, nombre y descripción.
      */
     public function scopeSearch(Builder $query, ?string $term): Builder
     {
@@ -124,7 +133,8 @@ class Product extends Model
             $subQuery
                 ->where('sku', 'like', "%{$term}%")
                 ->orWhere('name', 'like', "%{$term}%")
-                ->orWhere('description', 'like', "%{$term}%");
+                ->orWhere('description', 'like', "%{$term}%")
+                ->orWhereHas('variants', fn (Builder $variants) => $variants->where('sku', 'like', "%{$term}%"));
         });
     }
 }

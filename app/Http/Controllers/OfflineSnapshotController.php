@@ -39,7 +39,7 @@ class OfflineSnapshotController extends Controller
                 'category:id,name',
                 'size:id,name',
                 'color:id,name,hex',
-                'images:id,product_id,path,sort',
+                'images:id,product_id,path,sort,disk,generation,deleted_at',
             ])
             ->orderByDesc('id')
             ->get();
@@ -76,6 +76,7 @@ class OfflineSnapshotController extends Controller
                     'hex' => $product->color->hex,
                 ] : null,
                 'image_url' => $imageUrl,
+                'image_generation' => $image?->generation,
                 'updated_at' => optional($product->updated_at)->toIso8601String(),
             ];
         })->values();

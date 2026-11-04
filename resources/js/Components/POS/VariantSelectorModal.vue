@@ -177,13 +177,13 @@ function confirmSelection() {
 
 <template>
   <UIModal :open="open" title="Seleccionar variante" size="md" @close="$emit('close')">
-    <div class="space-y-4">
+    <div class="space-y-4 app-card-stack">
       <div>
         <p class="text-sm font-semibold text-stone-900">{{ product?.name ?? 'Producto' }}</p>
         <p class="text-xs text-stone-400">{{ product?.sku ?? '' }}</p>
       </div>
 
-      <div v-if="!availableVariants.length" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+      <div v-if="!availableVariants.length" class="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 app-surface">
         Este producto no tiene variantes con stock disponible.
       </div>
 

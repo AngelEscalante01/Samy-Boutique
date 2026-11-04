@@ -18,6 +18,7 @@ class AddLayawayPaymentRequest extends FormRequest
             'amount' => ['required', 'numeric', 'min:0.01'],
             'reference' => ['nullable', 'string', 'max:120'],
             'observacion' => ['nullable', 'string', 'max:500'],
+            'payer_name' => ['nullable', 'string', 'max:180'],
             'auto_liquidate' => ['sometimes', 'boolean'],
         ];
     }

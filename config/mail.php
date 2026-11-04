@@ -16,6 +16,11 @@ return [
 
     'default' => env('MAIL_MAILER', 'log'),
 
+    // Development delivery is confined to the explicitly selected test inbox.
+    'to' => env('APP_ENV') === 'local' && env('MAIL_DEVELOPMENT_TO')
+        ? ['address' => env('MAIL_DEVELOPMENT_TO'), 'name' => 'Pruebas Samy Boutique']
+        : null,
+
     /*
     |--------------------------------------------------------------------------
     | Mailer Configurations
@@ -39,12 +44,12 @@ return [
         'smtp' => [
             'transport' => 'smtp',
             'url' => env('MAIL_URL'),
+            'scheme' => env('MAIL_SCHEME'),
             'host' => env('MAIL_HOST', '127.0.0.1'),
             'port' => env('MAIL_PORT', 2525),
-            'encryption' => env('MAIL_ENCRYPTION', 'tls'),
             'username' => env('MAIL_USERNAME'),
             'password' => env('MAIL_PASSWORD'),
-            'timeout' => null,
+            'timeout' => env('MAIL_TIMEOUT', 10),
             'local_domain' => env('MAIL_EHLO_DOMAIN'),
         ],
 

@@ -1,0 +1,53 @@
+{
+  "restored_slides": 2,
+  "mobile_document_width": 386,
+  "public_domain": "https://samyboutique.com.mx",
+  "created_ids": [
+    1,
+    2
+  ],
+  "verified_assets": 4,
+  "mobile_dimensions": [
+    900,
+    1124
+  ],
+  "mobile_viewport": [
+    390,
+    844
+  ],
+  "desktop_dimensions": [
+    1800,
+    600
+  ],
+  "destinations": [
+    "/catalogo?q=vestido",
+    "/catalogo?category_id=5"
+  ],
+  "destination_result_counts": [
+    203,
+    12
+  ],
+  "assets": [
+    {
+      "bytes": 120958,
+      "name": "banner-vestidos-desktop.webp",
+      "sha256": "b46d28bcc2aeef05c87af1a5c7829b96b55067f09078bf92df4dcb86aa0163ab"
+    },
+    {
+      "bytes": 99488,
+      "name": "banner-vestidos-mobile.webp",
+      "sha256": "0ab22efba36c18c35e6eda88c6c6543566c80d4137974df1a59deb27981120c6"
+    },
+    {
+      "bytes": 73232,
+      "name": "banner-estilo-desktop.webp",
+      "sha256": "753ce0922583337a3fb0339be77650da6607433007a18a4478a7f387f4d95a7c"
+    },
+    {
+      "bytes": 94996,
+      "name": "banner-estilo-mobile.webp",
+      "sha256": "55e54fc02863a5555f14f0ffc26eed3500983abbbcc1a48e7a2757b1c616d88d"
+    }
+  ],
+  "commerce_records_written": 0
+}

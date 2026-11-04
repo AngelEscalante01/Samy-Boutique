@@ -43,6 +43,20 @@ return [
             'after_commit' => false,
         ],
 
+        // Sale notifications always use a persistent async queue, even when
+        // QUEUE_CONNECTION is set to "sync" in an environment.
+        'sale_notifications' => [
+            'driver' => 'database',
+            'connection' => env('DB_QUEUE_CONNECTION', null),
+            'table' => env('DB_QUEUE_TABLE', 'jobs'),
+            'queue' => 'sale-notifications',
+            'delay_seconds' => (int) env('SALE_NOTIFICATION_DELAY_SECONDS', 60),
+            // Keep reserved jobs invisible until the bounded Cron worker has
+            // exited, including its maximum active-job timeout window.
+            'retry_after' => 180,
+            'after_commit' => true,
+        ],
+
         'beanstalkd' => [
             'driver' => 'beanstalkd',
             'host' => env('BEANSTALKD_QUEUE_HOST', 'localhost'),

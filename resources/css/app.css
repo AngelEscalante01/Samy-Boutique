@@ -1,3 +1,92 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Shared pill-shaped scrollbars, including the page, cart, tables and dialogs. */
+:root {
+    --samy-scrollbar-rgb: 113 113 122;
+}
+.samy-app-shell .sidebar-scrollbar {
+    --samy-scrollbar-rgb: 255 255 255;
+}
+*::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+    background: transparent;
+}
+*::-webkit-scrollbar-track {
+    background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+    min-height: 36px;
+    min-width: 36px;
+    border-radius: 9999px;
+    background: rgb(var(--samy-scrollbar-rgb) / 38%);
+}
+*::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--samy-scrollbar-rgb) / 65%);
+}
+*::-webkit-scrollbar-thumb:active {
+    background: rgb(var(--samy-scrollbar-rgb) / 85%);
+}
+*::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+}
+*::-webkit-scrollbar-corner {
+    background: transparent;
+}
+@supports not selector(::-webkit-scrollbar) {
+    * {
+        scrollbar-width: thin;
+        scrollbar-color: rgb(var(--samy-scrollbar-rgb) / 38%) transparent;
+    }
+}
+
+/* Authenticated workspace density; public catalog, dialogs and POS cards keep their own layout. */
+.workspace-page .app-page,
+.workspace-page.app-page {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+}
+.workspace-page .app-page > :not([hidden]) ~ :not([hidden]),
+.workspace-page.app-page > :not([hidden]) ~ :not([hidden]),
+.workspace-page .app-card-stack > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+.workspace-page .app-card-grid {
+    gap: 0;
+}
+.workspace-page .app-surface {
+    border-radius: 0;
+    box-shadow: none;
+    margin: 0;
+}
+.workspace-page .app-surface:is(.p-5, .p-6, .p-8) {
+    padding: 12px;
+}
+.workspace-page .app-heading {
+    padding: 12px;
+    margin: 0;
+}
+
+/* Product editor fields and separated variant cards. */
+.product-editor .editor-section { border: 1px solid #e7e5e4; background: white; }
+.product-editor .section-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #f5f5f4; }
+.product-editor .section-heading h2 { font-size: 16px; font-weight: 700; color: #1c1917; }
+.product-editor .section-heading p { margin-top: 3px; font-size: 12px; color: #78716c; }
+.product-editor .field { display: flex; min-width: 0; flex-direction: column; gap: 5px; font-size: 12px; font-weight: 600; color: #44403c; }
+.product-editor .field input, .product-editor .field select, .product-editor .field textarea { width: 100%; min-width: 0; border: 1px solid #d6d3d1; border-radius: 8px; padding: 9px 10px; background: white; font-size: 14px; font-weight: 400; color: #1c1917; }
+.product-editor .field .hint { font-size: 11px; font-weight: 400; color: #78716c; }
+.product-editor .field small { color: #be123c; font-weight: 400; }
+.product-editor .field small:empty { display: none; }
+.product-editor .picker { display: inline-flex; cursor: pointer; align-items: center; border: 1px solid #d6d3d1; border-radius: 8px; background: white; padding: 8px 10px; font-size: 12px; font-weight: 600; color: #44403c; }
+.product-editor .picker input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.product-editor .picker:focus-within { outline: 2px solid #fbbf24; outline-offset: 2px; }
+.product-editor .scope-option { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 12px; color: #44403c; }
+.product-editor .scope-option input { border-radius: 4px; border-color: #a8a29e; color: #1c1917; }
+.product-editor .photo-action { border: 1px solid #e7e5e4; border-radius: 6px; padding: 3px 10px; font-size: 12px; color: #57534e; }

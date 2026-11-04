@@ -1,0 +1,65 @@
+{
+  "verified_at_utc": "2026-10-30T17:01:29.295139+00:00",
+  "php_tests_passed": 171,
+  "php_tests_skipped": 3,
+  "php_assertions": 1761,
+  "targeted_php_tests": 36,
+  "javascript_tests_passed": 17,
+  "web_build": "Vite/PWA passed",
+  "runtime": {
+    "samy-android-qa": {
+      "column_exists": true,
+      "migration_recorded": true,
+      "hashes": {
+        "app/Models/ProductImage.php": "b43432857d85d08759091eca3ab0872186af4de729475781a74934b20c8cff5a",
+        "app/Http/Controllers/ProductController.php": "35f5b51b227980ca3d5e36c4b2c3d3e0690a043f7ffe4faa32ce8127105bed13",
+        "app/Http/Resources/ProductResource.php": "439703cf5bbbd4193f4cd1dc2ca70994b8964b3eb7d84c40d9bd5ea7ff35cc09",
+        "app/Http/Requests/Concerns/ProductImageAssociationRules.php": "7e5491fba9fc93217c6138339ae5a7cfea23cfb55ad8c29e9335abfd864d1bf0",
+        "app/Services/ProductImageAssignments.php": "61cd7f25ff5bf6d9196a1e37d13bfef1756d471bc4769c015e019ccfffebed32",
+        "public/build/manifest.json": "b86ee4ef51f534bff9227892266736c1a5d9a14e7646d6d25fb3e4f78e910465"
+      }
+    },
+    "samy-sandbox-web-1": {
+      "column_exists": true,
+      "migration_recorded": true,
+      "hashes": {
+        "app/Models/ProductImage.php": "b43432857d85d08759091eca3ab0872186af4de729475781a74934b20c8cff5a",
+        "app/Http/Controllers/ProductController.php": "35f5b51b227980ca3d5e36c4b2c3d3e0690a043f7ffe4faa32ce8127105bed13",
+        "app/Http/Resources/ProductResource.php": "439703cf5bbbd4193f4cd1dc2ca70994b8964b3eb7d84c40d9bd5ea7ff35cc09",
+        "app/Http/Requests/Concerns/ProductImageAssociationRules.php": "7e5491fba9fc93217c6138339ae5a7cfea23cfb55ad8c29e9335abfd864d1bf0",
+        "app/Services/ProductImageAssignments.php": "61cd7f25ff5bf6d9196a1e37d13bfef1756d471bc4769c015e019ccfffebed32",
+        "public/build/manifest.json": "b86ee4ef51f534bff9227892266736c1a5d9a14e7646d6d25fb3e4f78e910465"
+      }
+    }
+  },
+  "browser": {
+    "created_via_form": true,
+    "uploaded_synthetic_photos": 3,
+    "variants": 2,
+    "public_photos_before": 3,
+    "public_photos_after_red_stock_zero": 2,
+    "red_hidden": true,
+    "blue_visible": true,
+    "shared_visible": true,
+    "photos_restored": 3,
+    "red_visible_after_restock": true,
+    "mobile": {
+      "document": 386,
+      "viewport": 386,
+      "variantCards": 2
+    }
+  },
+  "cleanup": {
+    "synthetic_product_removed": 3,
+    "synthetic_objects_removed": 9,
+    "catalog_code_reservations_preserved": true
+  },
+  "qa_reconciliation_checks": 11,
+  "temporary_access_removed": true,
+  "temporary_preview_removed": true,
+  "android_source_changed": false,
+  "commercial_test_data_used": false,
+  "automatic_photo_deletion_enabled": false,
+  "production_modified": false,
+  "vps_modified": false
+}

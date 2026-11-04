@@ -1,17 +1,91 @@
 <script setup>
-import { computed, ref } from 'vue';
-import { Link, usePage } from '@inertiajs/vue3';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { Link, router, usePage } from '@inertiajs/vue3';
 import Dropdown from '@/Components/Dropdown.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
+import { initializeWebPush, unregisterWebPush } from '@/services/web-push';
 
 const sidebarOpen = ref(false);
+const unreadCount = ref(0);
+const bellOpen = ref(false);
+const recentNotifications = ref([]);
+let pollTimer = null;
 
 const page = usePage();
+const isPosPage = computed(() => /^\/pos(?:[/?]|$)/.test(page.url));
 
 const user      = computed(() => page.props.auth?.user ?? null);
 const role      = computed(() => user.value?.role ?? (user.value?.roles?.[0] ?? null));
 const roleLabel = computed(() => (role.value ? String(role.value).toUpperCase() : null));
 const isManager = computed(() => String(role.value ?? '').toLowerCase() === 'gerente');
+
+async function refreshUnreadCount() {
+    if (document.visibilityState !== 'visible' || !user.value) return;
+    try {
+        const { data } = await window.axios.get('/api/notifications/unread-count');
+        unreadCount.value = Number(data?.data?.unread_count ?? 0);
+    } catch (_) {
+        // The app remains usable while the notifications API is unavailable.
+    }
+}
+
+async function toggleBell() {
+    bellOpen.value = !bellOpen.value;
+    if (!bellOpen.value) return;
+    try {
+        const { data } = await window.axios.get('/api/notifications', { params: { per_page: 5 } });
+        recentNotifications.value = data?.data ?? [];
+    } catch (_) {
+        recentNotifications.value = [];
+    }
+}
+
+async function openNotification(notification) {
+    if (!notification.read_at) {
+        await window.axios.patch(`/api/notifications/${notification.id}/read`).catch(() => {});
+        await refreshUnreadCount();
+    }
+    const resourceId = String(notification.resource_id ?? '');
+    const paths = {
+        sale: /^\d+$/.test(resourceId) ? `/sales/${resourceId}` : null,
+        layaway: /^\d+$/.test(resourceId) ? `/layaways/${resourceId}` : null,
+        product: '/products',
+        cash_cut: /^\d+$/.test(resourceId) ? `/cash-cuts/${resourceId}` : null,
+        announcement: '/notifications',
+    };
+    const destination = paths[notification.resource_type] || '/notifications';
+    bellOpen.value = false;
+    router.visit(destination);
+}
+
+async function markAllRead() {
+    await window.axios.post('/api/notifications/read-all').catch(() => {});
+    await refreshUnreadCount();
+    await toggleBell();
+}
+
+function onVisibilityChange() {
+    if (document.visibilityState === 'visible') refreshUnreadCount();
+}
+
+async function logout() {
+    const installationId = await unregisterWebPush();
+    router.post(route('logout'), { installation_id: installationId });
+}
+
+onMounted(() => {
+    initializeWebPush();
+    refreshUnreadCount();
+    pollTimer = window.setInterval(refreshUnreadCount, 60000);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('samy:notification-received', refreshUnreadCount);
+});
+
+onUnmounted(() => {
+    if (pollTimer) window.clearInterval(pollTimer);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+    window.removeEventListener('samy:notification-received', refreshUnreadCount);
+});
 
 const permissionsSet = computed(() => {
     const perms = user.value?.permissions;
@@ -45,6 +119,8 @@ const icons = {
     cashcuts:     { viewBox: '0 0 24 24', paths: ['M12 1v22', 'M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6'] },
     settings:     { viewBox: '0 0 24 24', paths: ['M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z', 'M19.4 15a7.97 7.97 0 0 0 .1-1 7.97 7.97 0 0 0-.1-1l2.1-1.6-2-3.4-2.5 1a8.2 8.2 0 0 0-1.7-1L15 3h-6l-.4 3a8.2 8.2 0 0 0-1.7 1l-2.5-1-2 3.4L4.6 13a7.97 7.97 0 0 0-.1 1c0 .34.03.67.1 1L2.5 16.6l2 3.4 2.5-1a8.2 8.2 0 0 0 1.7 1l.4 3h6l.4-3a8.2 8.2 0 0 0 1.7-1l2.5 1 2-3.4L19.4 15Z'] },
     users:        { viewBox: '0 0 24 24', paths: ['M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8', 'M23 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'] },
+    notifications: { viewBox: '0 0 24 24', paths: ['M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9', 'M10 21h4'] },
+    notifications_email: { viewBox: '0 0 24 24', paths: ['M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9', 'M10 21h4'] },
 };
 
 const navItems = computed(() => [
@@ -89,14 +165,14 @@ const navItems = computed(() => [
         label: 'Productos',
         href: route('products.index'),
         permission: 'products.view',
-        active: route().current('products.index') || route().current('products.create') || route().current('products.edit'),
+        active: route().current('products.index') || route().current('products.create') || route().current('products.edit') || route().current('products.show'),
     },
     {
         key: 'catalogs',
         label: 'Catálogos',
         href: route('catalogs.categories.index'),
         permission: 'catalogs.manage',
-        active: page.url.startsWith('/catalogs'),
+        active: page.url.startsWith('/catalogs') || page.url.startsWith('/catalog-slides'),
     },
     {
         key: 'coupons',
@@ -135,6 +211,21 @@ const navItems = computed(() => [
         show: isManager.value,
         active: route().current('settings.*') || page.url.startsWith('/settings'),
     },
+    {
+        key: 'notifications',
+        label: 'Notificaciones',
+        href: route('notifications.index'),
+        permission: null,
+        active: page.url === '/notifications' || page.url.startsWith('/notifications?'),
+    },
+    {
+        key: 'notifications_email',
+        label: 'Correos de aviso',
+        href: route('notifications.email-settings'),
+        permission: null,
+        show: isManager.value,
+        active: page.url.startsWith('/notifications/email-settings'),
+    },
 ]);
 
 const visibleNavItems = computed(() =>
@@ -149,7 +240,7 @@ function iconFor(key) { return icons[key] ?? null; }
 </script>
 
 <template>
-    <div class="min-h-screen bg-stone-50">
+    <div class="samy-app-shell min-h-screen bg-stone-50">
 
         <!-- ── Overlay móvil ───────────────────────────────────────────────── -->
         <transition
@@ -162,7 +253,7 @@ function iconFor(key) { return icons[key] ?? null; }
         >
             <div
                 v-if="sidebarOpen"
-                class="fixed inset-0 z-40 md:hidden"
+                class="fixed inset-0 z-40 min-[840px]:hidden"
                 @click="closeMobileSidebar"
                 aria-hidden="true"
             >
@@ -172,12 +263,14 @@ function iconFor(key) { return icons[key] ?? null; }
 
         <!-- ── Sidebar móvil ──────────────────────────────────────────────── -->
         <aside
-            class="fixed inset-y-0 left-0 z-50 w-72 -translate-x-full bg-zinc-950 shadow-2xl transition-transform duration-200 ease-out md:hidden"
+            class="fixed inset-y-0 left-0 z-50 flex w-[240px] -translate-x-full flex-col overflow-hidden bg-zinc-950 shadow-2xl transition-transform duration-200 ease-out min-[840px]:hidden"
             :class="{ 'translate-x-0': sidebarOpen }"
+            :aria-hidden="!sidebarOpen"
+            :inert="!sidebarOpen"
             aria-label="Menú principal"
         >
             <!-- Logo -->
-            <div class="flex h-16 items-center justify-between border-b border-white/8 px-5">
+            <div class="flex h-14 shrink-0 items-center justify-between border-b border-white/8 px-5">
                 <div class="flex items-center gap-2.5">
                     <span class="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-400/20 text-amber-300">
                         <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -198,7 +291,7 @@ function iconFor(key) { return icons[key] ?? null; }
                 </button>
             </div>
 
-            <nav class="px-3 py-4">
+            <nav class="sidebar-scrollbar min-h-0 flex-1 overflow-y-auto px-3 py-4">
                 <div class="space-y-0.5">
                     <Link
                         v-for="item in visibleNavItems"
@@ -229,11 +322,11 @@ function iconFor(key) { return icons[key] ?? null; }
 
         <!-- ── Sidebar desktop ────────────────────────────────────────────── -->
         <aside
-            class="hidden md:fixed md:inset-y-0 md:flex md:w-64 md:flex-col bg-zinc-950"
+            class="hidden min-[840px]:fixed min-[840px]:inset-y-0 min-[840px]:flex min-[840px]:w-[240px] min-[840px]:flex-col bg-zinc-950"
             aria-label="Menú principal"
         >
             <!-- Logo -->
-            <div class="flex h-16 flex-shrink-0 items-center gap-3 border-b border-white/8 px-5">
+            <div class="flex h-14 flex-shrink-0 items-center gap-3 border-b border-white/8 px-5">
                 <span class="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/20">
                     <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c.576 0 1.059.435 1.119 1.007Z" />
@@ -246,7 +339,7 @@ function iconFor(key) { return icons[key] ?? null; }
             </div>
 
             <!-- Nav -->
-            <nav class="flex-1 overflow-y-auto px-3 py-4 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-zinc-800">
+            <nav class="sidebar-scrollbar min-h-0 flex-1 overflow-y-auto px-3 py-4">
                 <div class="space-y-0.5">
                     <Link
                         v-for="item in visibleNavItems"
@@ -290,17 +383,17 @@ function iconFor(key) { return icons[key] ?? null; }
         </aside>
 
         <!-- ── Columna principal ───────────────────────────────────────────── -->
-        <div class="flex min-h-screen flex-col md:pl-64">
+        <div :class="isPosPage ? 'flex h-dvh min-h-0 flex-col overflow-hidden min-[840px]:pl-[240px]' : 'flex min-h-screen flex-col min-[840px]:pl-[240px]'">
 
             <!-- Header -->
             <header class="sticky top-0 z-30 border-b border-stone-200 bg-white/95 backdrop-blur-sm">
-                <div class="flex h-14 items-center justify-between px-4 sm:px-6">
+                <div class="flex h-12 items-center justify-between px-3">
 
                     <!-- Hamburger (móvil) -->
                     <div class="flex items-center gap-3">
                         <button
                             type="button"
-                            class="inline-flex items-center justify-center rounded-xl p-2 text-stone-600 transition-colors hover:bg-stone-100 md:hidden"
+                            class="inline-flex items-center justify-center rounded-xl p-2 text-stone-600 transition-colors hover:bg-stone-100 min-[840px]:hidden"
                             @click="sidebarOpen = true"
                             aria-label="Abrir menú"
                         >
@@ -310,11 +403,38 @@ function iconFor(key) { return icons[key] ?? null; }
                         </button>
 
                         <!-- Brand (móvil) -->
-                        <span class="text-sm font-semibold tracking-wider text-stone-800 md:hidden">Samy Boutique</span>
+                        <span class="text-sm font-semibold tracking-wider text-stone-800 min-[840px]:hidden">Samy Boutique</span>
                     </div>
 
                     <!-- Right side -->
                     <div class="flex items-center gap-3">
+                        <div class="relative">
+                            <button type="button" class="relative rounded-xl p-2 text-stone-600 hover:bg-stone-100" aria-label="Notificaciones" @click="toggleBell">
+                                <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" />
+                                </svg>
+                                <span v-if="unreadCount" class="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-rose-600 px-1 text-center text-[10px] font-bold leading-4 text-white">{{ unreadCount > 99 ? '99+' : unreadCount }}</span>
+                            </button>
+                            <div v-if="bellOpen" class="absolute right-0 z-50 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-xl">
+                                <div class="flex items-center justify-between border-b border-stone-100 px-4 py-3">
+                                    <p class="text-sm font-semibold text-stone-900">Notificaciones</p>
+                                    <button class="text-xs font-medium text-amber-800 hover:underline" @click="markAllRead">Marcar todas</button>
+                                </div>
+                                <div v-if="recentNotifications.length" class="max-h-80 overflow-y-auto">
+                                    <button v-for="item in recentNotifications" :key="item.id" class="block w-full border-b border-stone-100 px-4 py-3 text-left hover:bg-stone-50" @click="openNotification(item)">
+                                        <span class="flex items-start gap-2">
+                                            <span class="mt-1.5 h-2 w-2 shrink-0 rounded-full" :class="item.read_at ? 'bg-stone-200' : 'bg-amber-500'" />
+                                            <span class="min-w-0">
+                                                <span class="block truncate text-sm font-medium text-stone-900">{{ item.title }}</span>
+                                                <span class="mt-0.5 block line-clamp-2 text-xs text-stone-500">{{ item.message }}</span>
+                                            </span>
+                                        </span>
+                                    </button>
+                                </div>
+                                <div v-else class="px-4 py-7 text-center text-sm text-stone-500">No hay avisos recientes.</div>
+                                <Link :href="route('notifications.index')" class="block border-t border-stone-100 px-4 py-3 text-center text-sm font-semibold text-amber-800 hover:bg-amber-50">Ver todas</Link>
+                            </div>
+                        </div>
                         <!-- Role badge -->
                         <span
                             v-if="roleLabel"
@@ -361,12 +481,12 @@ function iconFor(key) { return icons[key] ?? null; }
                                     </svg>
                                     Perfil
                                 </DropdownLink>
-                                <DropdownLink :href="route('logout')" method="post" as="button">
+                                <button type="button" class="flex w-full items-center px-4 py-2 text-left text-sm text-stone-600 hover:bg-stone-50" @click="logout">
                                     <svg class="mr-2 h-4 w-4 text-stone-400" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
                                     </svg>
                                     Cerrar sesión
-                                </DropdownLink>
+                                </button>
                             </template>
                         </Dropdown>
                     </div>
@@ -374,7 +494,7 @@ function iconFor(key) { return icons[key] ?? null; }
             </header>
 
             <!-- Content -->
-            <main class="flex-1 px-4 py-6 sm:px-6 lg:px-8">
+            <main :class="isPosPage ? 'flex min-h-0 flex-1 flex-col overflow-hidden p-0' : 'workspace-content min-w-0 flex-1 p-0'">
                 <transition
                     mode="out-in"
                     enter-active-class="transition duration-150 ease-out"
@@ -384,7 +504,7 @@ function iconFor(key) { return icons[key] ?? null; }
                     leave-from-class="opacity-100 translate-y-0"
                     leave-to-class="opacity-0 translate-y-1"
                 >
-                    <div :key="page.url">
+                    <div :key="isPosPage ? 'pos' : page.url" :class="isPosPage ? 'min-h-0 flex-1' : 'workspace-page app-page'">
                         <slot />
                     </div>
                 </transition>

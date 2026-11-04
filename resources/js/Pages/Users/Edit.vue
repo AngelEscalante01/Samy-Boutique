@@ -44,7 +44,7 @@ function updatePassword() {
 <template>
   <Head :title="`Editar · ${user.name}`" />
 
-  <div class="mx-auto max-w-2xl px-4 py-8 sm:px-6 lg:px-8 space-y-6">
+  <div class="mx-auto max-w-2xl px-4 py-8 sm:px-6 lg:px-8 space-y-6 app-card-stack app-page">
 
     <!-- ── Breadcrumb ──────────────────────────────────────────────────────── -->
     <nav class="flex items-center gap-2 text-sm text-gray-500">
@@ -60,7 +60,7 @@ function updatePassword() {
     </nav>
 
     <!-- ── Encabezado ─────────────────────────────────────────────────────── -->
-    <div class="flex items-center gap-4">
+    <div class="flex items-center gap-4 app-heading">
       <span class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-indigo-100 text-lg font-bold text-indigo-600">
         {{ user.name.charAt(0).toUpperCase() }}
       </span>
@@ -83,7 +83,7 @@ function updatePassword() {
       leave-to-class="opacity-0"
     >
       <div v-if="flash.success"
-           class="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+           class="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 app-surface">
         <svg class="h-4 w-4 flex-shrink-0 mt-0.5 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
         </svg>
@@ -92,8 +92,8 @@ function updatePassword() {
     </Transition>
 
     <!-- ── Form principal ─────────────────────────────────────────────────── -->
-    <form @submit.prevent="updateUser" class="space-y-5">
-      <div class="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-200">
+    <form @submit.prevent="updateUser" class="space-y-5 app-card-stack">
+      <div class="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-200 app-surface">
         <div class="border-b border-gray-100 bg-gray-50/50 px-5 py-3">
           <h2 class="text-sm font-semibold text-gray-700">Datos del usuario</h2>
         </div>
@@ -176,7 +176,7 @@ function updatePassword() {
     </form>
 
     <!-- ── Sección cambio de contraseña ──────────────────────────────────── -->
-    <div class="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-200">
+    <div class="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-gray-200 app-surface">
       <button
         type="button"
         class="flex w-full items-center justify-between px-5 py-3.5 border-b border-gray-100

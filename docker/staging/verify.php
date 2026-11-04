@@ -1,0 +1,6 @@
+<?php
+require '/app/vendor/autoload.php';
+$app=require '/app/bootstrap/app.php';$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+use Illuminate\Support\Facades\DB;
+if(getenv('SAMY_QA_ONLY')!=='1'||!app()->environment('staging')||DB::getDatabaseName()!=='samy_vps_qa'||config('database.connections.mysql.host')!=='mysql')throw new RuntimeException('Not isolated VPS QA');
+echo json_encode(['environment'=>app()->environment(),'db'=>DB::getDatabaseName(),'timezone'=>config('app.timezone'),'r2_public'=>config('filesystems.disks.r2_public.bucket'),'r2_private'=>config('filesystems.disks.r2_private.bucket'),'firebase_project'=>config('firebase.project_id'),'push_general'=>config('firebase.push_enabled'),'sales'=>App\Models\Sale::count(),'sale_payments'=>DB::table('sale_payments')->count(),'layaways'=>App\Models\Layaway::count(),'layaway_payments'=>App\Models\LayawayPayment::count(),'receipts'=>DB::table('api_operation_receipts')->count(),'variants'=>App\Models\ProductVariant::orderBy('id')->get(['id','sku','stock'])->toArray(),'failed_jobs'=>DB::table('failed_jobs')->count(),'devices'=>App\Models\NotificationDevice::get(['id','user_id','platform','active','permission_status'])->toArray()],JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE).PHP_EOL;

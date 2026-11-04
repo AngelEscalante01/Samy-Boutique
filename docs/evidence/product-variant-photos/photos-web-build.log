@@ -1,0 +1,90 @@
+
+> build
+> vite build
+
+vite v5.4.21 building for production...
+transforming...
+Browserslist: browsers data (caniuse-lite) is 8 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+✓ 902 modules transformed.
+rendering chunks...
+computing gzip size...
+public/build/manifest.webmanifest                               0.55 kB
+public/build/manifest.json                                     20.45 kB │ gzip:   2.24 kB
+public/build/assets/app-BAeIGepa.css                           94.93 kB │ gzip:  15.71 kB
+public/build/assets/_plugin-vue_export-helper-DlAUqK2U.js       0.09 kB │ gzip:   0.10 kB
+public/build/assets/PrimaryButton-CUoPU4nD.js                   0.55 kB │ gzip:   0.38 kB
+public/build/assets/RoleBadge-bhU33WSW.js                       0.65 kB │ gzip:   0.42 kB
+public/build/assets/Toggle-CfdyGXBI.js                          0.82 kB │ gzip:   0.49 kB
+public/build/assets/CouponBadge-cW0nAPWA.js                     0.83 kB │ gzip:   0.49 kB
+public/build/assets/SaleStatusBadge-7GedA-PV.js                 0.88 kB │ gzip:   0.49 kB
+public/build/assets/TextInput-UJiCbqyG.js                       1.05 kB │ gzip:   0.58 kB
+public/build/assets/Edit-DcgWC9iZ.js                            1.14 kB │ gzip:   0.62 kB
+public/build/assets/Create-Dp5HeM-2.js                          1.22 kB │ gzip:   0.67 kB
+public/build/assets/ConfirmPassword-B5bSPwuJ.js                 1.30 kB │ gzip:   0.74 kB
+public/build/assets/VerifyEmail-D42ntb-9.js                     1.56 kB │ gzip:   0.90 kB
+public/build/assets/Offline-C8sUjC_l.js                         1.91 kB │ gzip:   1.05 kB
+public/build/assets/BarcodePreview-BclUQvW1.js                  1.92 kB │ gzip:   0.96 kB
+public/build/assets/Register-p4XVISHp.js                        2.51 kB │ gzip:   0.96 kB
+public/build/assets/UpdatePasswordForm-DbtVlIq6.js              2.58 kB │ gzip:   1.01 kB
+public/build/assets/UpdateProfileInformationForm-Bgr73dSX.js    2.60 kB │ gzip:   1.21 kB
+public/build/assets/Index-9idPxnOA.js                           2.90 kB │ gzip:   1.25 kB
+public/build/assets/Show-Cp6bovW_.js                            3.32 kB │ gzip:   1.43 kB
+public/build/assets/GuestLayout-RUm-norK.js                     3.69 kB │ gzip:   1.75 kB
+public/build/assets/Index-DvN8KP9L.js                           3.72 kB │ gzip:   1.63 kB
+public/build/assets/Index-C2ZMrTv9.js                           4.29 kB │ gzip:   1.68 kB
+public/build/assets/Index-CftCYeeA.js                           4.86 kB │ gzip:   1.79 kB
+public/build/assets/Create-BJB4iExG.js                          5.03 kB │ gzip:   1.81 kB
+public/build/assets/DeleteUserForm-gPWXB7sB.js                  5.12 kB │ gzip:   2.11 kB
+public/build/assets/ForgotPassword-BSGiQOzv.js                  5.27 kB │ gzip:   2.33 kB
+public/build/assets/Index-D1Dzsokq.js                           5.53 kB │ gzip:   2.00 kB
+public/build/assets/MovementShow-DP875nYZ.js                    5.70 kB │ gzip:   1.94 kB
+public/build/assets/workbox-window.prod.es5-vqzQaGvo.js         5.72 kB │ gzip:   2.35 kB
+public/build/assets/Index-CkJ770SZ.js                           6.39 kB │ gzip:   2.34 kB
+public/build/assets/Create-IR9blR-n.js                          6.94 kB │ gzip:   2.15 kB
+public/build/assets/Edit-Cgfzmx1H.js                            6.95 kB │ gzip:   2.82 kB
+public/build/assets/EmailSettings-D9ZZxWFk.js                   7.48 kB │ gzip:   2.77 kB
+public/build/assets/Edit-B-mjoln9.js                            7.80 kB │ gzip:   2.85 kB
+public/build/assets/Show-BHaNZPkT.js                            8.10 kB │ gzip:   2.98 kB
+public/build/assets/Login-ClGujSvd.js                           8.55 kB │ gzip:   3.08 kB
+public/build/assets/ResetPassword-CjDw2EyR.js                   8.93 kB │ gzip:   2.85 kB
+public/build/assets/sync-US-vJU59.js                            9.38 kB │ gzip:   3.38 kB
+public/build/assets/Bulk-hkX32R2s.js                            9.61 kB │ gzip:   3.72 kB
+public/build/assets/VariantSelectorModal-Cwv1nCz5.js            9.81 kB │ gzip:   3.45 kB
+public/build/assets/Edit-CBY6ZfoA.js                           10.12 kB │ gzip:   2.94 kB
+public/build/assets/Create-CsJtB01Y.js                         10.25 kB │ gzip:   3.15 kB
+public/build/assets/Show-DOvrLK2_.js                           11.63 kB │ gzip:   3.38 kB
+public/build/assets/Index-DyqArAAM.js                          11.72 kB │ gzip:   3.52 kB
+public/build/assets/DailyCut-DofFjz1o.js                       11.87 kB │ gzip:   3.50 kB
+public/build/assets/Index-xbVxwVdP.js                          11.97 kB │ gzip:   3.45 kB
+public/build/assets/Show-Ccx61UIA.js                           12.12 kB │ gzip:   3.50 kB
+public/build/assets/Index-C8VKk0nF.js                          12.29 kB │ gzip:   3.54 kB
+public/build/assets/Index-CuMVymFa.js                          12.34 kB │ gzip:   2.77 kB
+public/build/assets/Edit-hKcJrq0U.js                           12.74 kB │ gzip:   3.78 kB
+public/build/assets/Edit-BQny_3Hm.js                           13.28 kB │ gzip:   4.47 kB
+public/build/assets/Index-CMwV0plm.js                          13.36 kB │ gzip:   4.03 kB
+public/build/assets/Index-YGSMa_dg.js                          13.76 kB │ gzip:   4.16 kB
+public/build/assets/Import-C-3d3Y3g.js                         13.98 kB │ gzip:   5.19 kB
+public/build/assets/Index-t0ugEThq.js                          14.49 kB │ gzip:   4.17 kB
+public/build/assets/CatalogTable-BStJb8mo.js                   14.67 kB │ gzip:   3.91 kB
+public/build/assets/Index-C9f-S_0Q.js                          17.05 kB │ gzip:   4.64 kB
+public/build/assets/Index-CIQa2ou_.js                          17.16 kB │ gzip:   4.52 kB
+public/build/assets/ProductEditor-BppQMBsX.js                  17.84 kB │ gzip:   6.05 kB
+public/build/assets/Create-B_LY_AuI.js                         18.73 kB │ gzip:   6.08 kB
+public/build/assets/Welcome-Dm57t2B_.js                        18.77 kB │ gzip:   6.19 kB
+public/build/assets/Index-DcxcCTu2.js                          18.89 kB │ gzip:   6.31 kB
+public/build/assets/Show-BoWhwdBF.js                           21.42 kB │ gzip:   6.41 kB
+public/build/assets/Index-DrgRDDg4.js                          25.05 kB │ gzip:   8.02 kB
+public/build/assets/Index-xetxNxJ7.js                          28.13 kB │ gzip:   8.32 kB
+public/build/assets/Show-IMAALjRE.js                           33.02 kB │ gzip:   9.06 kB
+public/build/assets/Index-Bdzg6EP8.js                          57.42 kB │ gzip:  17.76 kB
+public/build/assets/Dashboard-2qkSPIzD.js                     155.72 kB │ gzip:  54.88 kB
+public/build/assets/app-CJhUSCn1.js                           397.56 kB │ gzip: 124.51 kB
+✓ built in 46.20s
+
+PWA v1.2.0
+mode      generateSW
+precache  71 entries (1259.51 KiB)
+files generated
+  public/build/sw.js

@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { Head, Link, useForm, usePage } from '@inertiajs/vue3'
 import SaleStatusBadge from '@/Components/Sales/SaleStatusBadge.vue'
 import PaymentsList    from '@/Components/Sales/PaymentsList.vue'
+import { printSale } from '@/services/printSale'
 
 const props = defineProps({
   sale: { type: Object, required: true },
@@ -11,6 +12,24 @@ const props = defineProps({
 
 const flash  = computed(() => usePage().props.flash ?? {})
 const isPaid = computed(() => props.sale.status === 'completed')
+const isPrinting = ref(false)
+const printFeedback = ref(null) // { type: 'success' | 'error', text: string }
+
+async function handlePrintSale() {
+  if (isPrinting.value) return
+
+  isPrinting.value = true
+  printFeedback.value = null
+
+  const result = await printSale(props.sale.id)
+
+  printFeedback.value = {
+    type: result.ok ? 'success' : 'error',
+    text: result.message,
+  }
+
+  isPrinting.value = false
+}
 
 // ── Cancel modal ─────────────────────────────────────────────────────────────
 const showCancelModal = ref(false)
@@ -82,10 +101,10 @@ const totalDiscounts   = computed(() =>
 <template>
   <Head :title="'Venta #' + sale.id" />
 
-  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6 app-card-stack app-page">
 
     <!-- ── Header ───────────────────────────────────────────────────────────── -->
-    <div class="flex flex-wrap items-start justify-between gap-4">
+    <div class="flex flex-wrap items-start justify-between gap-4 app-heading">
       <div class="flex items-center gap-3">
         <Link :href="route('sales.index')" class="text-gray-400 hover:text-gray-600 transition">
           <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -105,13 +124,16 @@ const totalDiscounts   = computed(() =>
       <div class="flex items-center gap-2 flex-wrap">
         <!-- Print (placeholder) -->
         <button
+          type="button"
+          @click="handlePrintSale"
+          :disabled="isPrinting"
           class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50 transition"
-          title="Próximamente"
+          :class="isPrinting ? 'opacity-60 cursor-not-allowed' : ''"
         >
           <svg class="h-4 w-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0 1 10.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0 .229 2.523a1.125 1.125 0 0 1-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0 0 21 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 0 0-1.913-.247M6.34 18H5.25A2.25 2.25 0 0 1 3 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.056 48.056 0 0 1 1.913-.247m10.5 0a48.536 48.536 0 0 0-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5Zm-3 0h.008v.008H15V10.5Z" />
           </svg>
-          Imprimir ticket
+          {{ isPrinting ? 'Imprimiendo...' : 'Imprimir ticket' }}
         </button>
 
         <!-- Cancel -->
@@ -129,16 +151,32 @@ const totalDiscounts   = computed(() =>
 
     <!-- ── Flash ─────────────────────────────────────────────────────────────── -->
     <div v-if="flash.success"
-      class="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-800 flex items-center gap-2">
+      class="rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-800 flex items-center gap-2 app-surface">
       <svg class="h-4 w-4 text-emerald-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
         <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
       </svg>
       {{ flash.success }}
     </div>
 
+    <div
+      v-if="printFeedback"
+      class="rounded-xl border px-4 py-3 text-sm flex items-center gap-2 app-surface"
+      :class="printFeedback.type === 'success'
+        ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+        : 'bg-red-50 border-red-200 text-red-800'"
+    >
+      <svg v-if="printFeedback.type === 'success'" class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+      </svg>
+      <svg v-else class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9.303 3.376c.866 1.5-.217 3.374-1.948 3.374H4.645c-1.73 0-2.813-1.874-1.948-3.374L10.051 3.378c.866-1.5 3.032-1.5 3.898 0l7.354 12.748ZM12 15.75h.007v.008H12v-.008Z" />
+      </svg>
+      {{ printFeedback.text }}
+    </div>
+
     <!-- ── Cancellation reason (if cancelled) ───────────────────────────────── -->
     <div v-if="sale.status === 'cancelled'"
-      class="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800">
+      class="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800 app-surface">
       <div><span class="font-semibold">Motivo:</span> {{ sale.cancel_reason ?? sale.cancellation_reason ?? '—' }}</div>
       <div class="mt-1 text-red-700/90">
         Tipo: <span class="font-medium capitalize">{{ sale.cancel_type ?? '—' }}</span>
@@ -148,9 +186,9 @@ const totalDiscounts   = computed(() =>
     </div>
 
     <!-- ── Meta info row ─────────────────────────────────────────────────────── -->
-    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 app-card-grid">
       <!-- Cajero -->
-      <div class="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
+      <div class="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-100 app-surface">
         <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Cajero</p>
         <div class="flex items-center gap-2 mt-1">
           <div class="h-7 w-7 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
@@ -161,7 +199,7 @@ const totalDiscounts   = computed(() =>
       </div>
 
       <!-- Cliente -->
-      <div class="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-100">
+      <div class="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-100 app-surface">
         <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Cliente</p>
         <div v-if="sale.customer" class="flex items-center gap-2 mt-1">
           <div class="h-7 w-7 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
@@ -176,7 +214,7 @@ const totalDiscounts   = computed(() =>
       </div>
 
       <!-- Total destacado -->
-      <div class="rounded-xl bg-gray-900 p-4 shadow-sm text-white">
+      <div class="rounded-xl bg-gray-900 p-4 shadow-sm text-white app-surface">
         <p class="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Total de la venta</p>
         <p class="text-3xl font-bold mt-1">${{ money(sale.total) }}</p>
         <p v-if="totalDiscounts > 0" class="text-xs text-gray-400 mt-1">
@@ -186,13 +224,13 @@ const totalDiscounts   = computed(() =>
     </div>
 
     <!-- ── Main content grid ─────────────────────────────────────────────────── -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 app-card-grid">
 
       <!-- Left: Products + Payments -->
-      <div class="lg:col-span-2 space-y-6">
+      <div class="lg:col-span-2 space-y-6 app-card-stack">
 
         <!-- Products table -->
-        <div class="rounded-xl bg-white shadow-sm ring-1 ring-gray-100 overflow-hidden">
+        <div class="rounded-xl bg-white shadow-sm ring-1 ring-gray-100 overflow-hidden app-surface">
           <div class="px-5 py-4 border-b border-gray-100">
             <h2 class="text-sm font-semibold text-gray-700">
               Productos
@@ -256,7 +294,7 @@ const totalDiscounts   = computed(() =>
         </div>
 
         <!-- Payments -->
-        <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 space-y-4">
+        <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 space-y-4 app-surface">
           <h2 class="text-sm font-semibold text-gray-700">Pagos registrados</h2>
           <PaymentsList :payments="sale.payments ?? []" />
         </div>
@@ -264,7 +302,7 @@ const totalDiscounts   = computed(() =>
 
       <!-- Right: Totals -->
       <div>
-        <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 space-y-3 sticky top-6">
+        <div class="rounded-xl bg-white p-5 shadow-sm ring-1 ring-gray-100 space-y-3 sticky top-6 app-surface">
           <h2 class="text-sm font-semibold text-gray-700 pb-2 border-b border-gray-100">Resumen de totales</h2>
 
           <!-- Subtotal -->

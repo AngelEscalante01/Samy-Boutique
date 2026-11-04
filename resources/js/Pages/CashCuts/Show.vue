@@ -14,10 +14,11 @@ const summary = computed(() => ({
   date:                   props.cashCut.cut_date,
   sales_count:            props.parsedTotals?.sales_count            ?? 0,
   canceled_count:         props.parsedTotals?.canceled_count         ?? 0,
-  total_sales:            props.parsedTotals?.total_sales            ?? 0,
-  discount_manual_total:  props.parsedTotals?.discount_manual_total  ?? 0,
-  discount_coupon_total:  props.parsedTotals?.discount_coupon_total  ?? 0,
-  discount_loyalty_total: props.parsedTotals?.discount_loyalty_total ?? 0,
+  total_sales:            props.parsedTotals?.total_sales            ?? props.parsedTotals?.total_sold ?? props.parsedTotals?.total_sum ?? 0,
+  profit_total:           props.parsedTotals?.profit_total           ?? props.parsedTotals?.profit_sum ?? 0,
+  discount_manual_total:  props.parsedTotals?.discount_manual_total  ?? props.parsedTotals?.discount_sum ?? 0,
+  discount_coupon_total:  props.parsedTotals?.discount_coupon_total  ?? props.parsedTotals?.coupon_discount_sum ?? 0,
+  discount_loyalty_total: props.parsedTotals?.discount_loyalty_total ?? props.parsedTotals?.loyalty_discount_sum ?? 0,
 }))
 
 const payments = computed(() => {
@@ -52,7 +53,7 @@ function printPage() {
 <template>
   <Head :title="`Corte ${cashCut.cut_date}`" />
 
-  <div class="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8 space-y-6">
+  <div class="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8 space-y-6 app-card-stack app-page">
 
     <!-- ── Breadcrumb ──────────────────────────────────────────────────────── -->
     <nav class="flex items-center gap-2 text-sm text-gray-500">
@@ -70,7 +71,7 @@ function printPage() {
     </nav>
 
     <!-- ── Encabezado ─────────────────────────────────────────────────────── -->
-    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between app-heading">
       <div>
         <h1 class="text-2xl font-bold text-gray-900 capitalize">{{ fmtDate(cashCut.cut_date + 'T00:00:00') }}</h1>
         <p class="mt-1 text-sm text-gray-500">Corte de caja guardado</p>
@@ -96,7 +97,7 @@ function printPage() {
     </div>
 
     <!-- ── Meta info ──────────────────────────────────────────────────────── -->
-    <div class="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 px-5 py-4">
+    <div class="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 px-5 py-4 app-surface">
       <dl class="grid grid-cols-2 gap-4 sm:grid-cols-3">
         <div>
           <dt class="text-xs font-semibold uppercase tracking-wide text-gray-500">Fecha del corte</dt>
@@ -120,7 +121,7 @@ function printPage() {
     <PaymentBreakdown :payments="payments" />
 
     <!-- ── Totales finales ────────────────────────────────────────────────── -->
-    <div class="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
+    <div class="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden app-surface">
       <div class="px-5 py-3 border-b border-gray-100 bg-gray-50/50">
         <h3 class="text-sm font-semibold text-gray-700">Totales del corte</h3>
       </div>
@@ -131,15 +132,19 @@ function printPage() {
         </div>
         <div class="flex justify-between px-5 py-3">
           <dt class="text-gray-600">Descuentos manuales</dt>
-          <dd class="font-medium tabular-nums text-amber-600">- ${{ money(parsedTotals?.discount_manual_total) }}</dd>
+          <dd class="font-medium tabular-nums text-amber-600">- ${{ money(summary.discount_manual_total) }}</dd>
         </div>
         <div class="flex justify-between px-5 py-3">
           <dt class="text-gray-600">Descuentos por cupón</dt>
-          <dd class="font-medium tabular-nums text-purple-600">- ${{ money(parsedTotals?.discount_coupon_total) }}</dd>
+          <dd class="font-medium tabular-nums text-purple-600">- ${{ money(summary.discount_coupon_total) }}</dd>
         </div>
         <div class="flex justify-between px-5 py-3">
           <dt class="text-gray-600">Descuentos fidelidad</dt>
-          <dd class="font-medium tabular-nums text-blue-600">- ${{ money(parsedTotals?.discount_loyalty_total) }}</dd>
+          <dd class="font-medium tabular-nums text-blue-600">- ${{ money(summary.discount_loyalty_total) }}</dd>
+        </div>
+        <div class="flex justify-between px-5 py-3">
+          <dt class="text-gray-600">Ganancia del corte</dt>
+          <dd class="font-medium tabular-nums text-emerald-700">${{ money(summary.profit_total) }}</dd>
         </div>
         <div class="flex justify-between bg-gray-50/80 px-5 py-4 border-t border-gray-200">
           <dt class="font-bold text-gray-900 text-base">Total cobrado</dt>

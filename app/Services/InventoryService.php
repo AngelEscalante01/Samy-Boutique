@@ -64,6 +64,7 @@ class InventoryService
 
     public function updateSoldOutAt(int $productId): void
     {
+        app(ProductStockEpisodes::class)->cancelIfRestocked($productId);
         $totalStock = (int) ProductVariant::query()
             ->where('product_id', $productId)
             ->where('active', true)

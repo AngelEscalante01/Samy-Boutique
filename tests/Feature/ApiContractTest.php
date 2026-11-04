@@ -4,13 +4,11 @@ namespace Tests\Feature;
 
 use App\Models\Category;
 use App\Models\Color;
-use App\Models\Customer;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\Size;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 class ApiContractTest extends TestCase
@@ -43,6 +41,7 @@ class ApiContractTest extends TestCase
         $size = Size::firstOrCreate(['name' => 'M'], ['active' => true]);
         $color = Color::firstOrCreate(['name' => 'Negro'], ['hex' => '#000000', 'active' => true]);
         $product = Product::create(['sku' => 'SKU-TEST-'.uniqid(), 'name' => 'Vestido', 'description' => 'Test', 'category_id' => $category->id, 'gender' => 'dama', 'size_id' => $size->id, 'color_id' => $color->id, 'purchase_price' => 100, 'sale_price' => 250, 'sale_price_base' => 250, 'status' => 'disponible', 'created_by' => $this->manager->id]);
+
         return ProductVariant::create(['product_id' => $product->id, 'sku' => 'SKU-TEST-M-'.uniqid(), 'size_id' => $size->id, 'color_id' => $color->id, 'stock' => $stock, 'purchase_price' => 100, 'sale_price' => 250, 'active' => true]);
     }
 
@@ -80,7 +79,7 @@ class ApiContractTest extends TestCase
         $this->withHeaders($headers)->getJson('/api/sales?payment_method=cash')->assertOk()->assertJsonPath('data.0.id', $sale['id']);
         $this->withHeaders($headers)->getJson('/api/sales?payment_method=card')->assertOk()->assertJsonPath('meta.total', 0);
         $mixedVariant = $this->product();
-        $mixedSale = $this->withHeaders($headers)->postJson('/api/sales', ['items' => [['variant_id' => $mixedVariant->id, 'qty' => 1]], 'payments' => [['method' => 'cash', 'amount' => 100], ['method' => 'card', 'amount' => 150]]])->assertCreated()->json('data.sale');
+        $mixedSale = $this->withHeaders($headers)->postJson('/api/sales', ['items' => [['variant_id' => $mixedVariant->id, 'qty' => 1]], 'payments' => [['method' => 'cash', 'amount' => 100], ['method' => 'card', 'amount' => 150]], 'dinero_recibido' => 250])->assertCreated()->json('data.sale');
         $this->withHeaders($headers)->getJson('/api/sales?payment_method=mixed')->assertOk()->assertJsonPath('data.0.id', $mixedSale['id']);
         $this->withHeaders($headers)->getJson('/api/sales/'.$sale['id'])->assertOk()->assertJsonPath('data.id', $sale['id'])->assertJsonPath('data.cash_received', 300)->assertJsonPath('data.change', 50);
         $this->withHeaders($headers)->getJson('/api/sales/'.$sale['id'].'/ticket')->assertOk()->assertJsonStructure(['data' => ['sale', 'business']])->assertJsonPath('data.sale.cash_received', 300)->assertJsonPath('data.sale.change', 50);
@@ -88,10 +87,11 @@ class ApiContractTest extends TestCase
         $this->assertNotEmpty($report->json('data.top_products'));
 
         $variant2 = $this->product();
-        $layaway = $this->withHeaders($headers)->postJson('/api/layaways', ['customer_id' => $customer['id'], 'items' => [['variant_id' => $variant2->id, 'qty' => 1]], 'anticipo_inicial' => 50, 'metodo_anticipo' => 'cash'])->assertCreated()->assertJsonStructure(['data' => ['id', 'folio', 'total', 'paid_total', 'saldo_restante', 'items', 'payments']])->json('data');
-        $this->withHeaders($headers)->getJson('/api/layaways')->assertOk()->assertJsonPath('data.0.id', $layaway['id']);
-        $this->withHeaders($headers)->getJson('/api/layaways/'.$layaway['id'])->assertOk()->assertJsonPath('data.id', $layaway['id']);
-        $this->withHeaders($headers)->postJson('/api/layaways/'.$layaway['id'].'/payments', ['amount' => 200, 'method' => 'card', 'auto_liquidate' => true])->assertCreated()->assertJsonStructure(['data' => ['payment' => ['id', 'amount', 'method'], 'layaway', 'liquidated', 'sale_id']])->assertJsonPath('data.liquidated', true);
+        $dueDate = now('America/Mexico_City')->addDays(15)->toDateString();
+        $layaway = $this->withHeaders($headers)->postJson('/api/layaways', ['customer_id' => $customer['id'], 'items' => [['variant_id' => $variant2->id, 'qty' => 1]], 'anticipo_inicial' => 50, 'metodo_anticipo' => 'cash', 'fecha_vencimiento' => $dueDate, 'observaciones' => 'Prueba'])->assertCreated()->assertJsonStructure(['data' => ['id', 'folio', 'total', 'paid_total', 'saldo_restante', 'items', 'payments']])->assertJsonPath('data.fecha_vencimiento', $dueDate)->assertJsonPath('data.observaciones', 'Prueba')->json('data');
+        $this->withHeaders($headers)->getJson('/api/layaways')->assertOk()->assertJsonPath('data.0.id', $layaway['id'])->assertJsonPath('data.0.fecha_vencimiento', $dueDate);
+        $this->withHeaders($headers)->getJson('/api/layaways/'.$layaway['id'])->assertOk()->assertJsonPath('data.id', $layaway['id'])->assertJsonPath('data.fecha_vencimiento', $dueDate);
+        $this->withHeaders($headers)->postJson('/api/layaways/'.$layaway['id'].'/payments', ['amount' => 200, 'method' => 'card', 'auto_liquidate' => true])->assertCreated()->assertJsonStructure(['data' => ['payment' => ['id', 'amount', 'method'], 'layaway', 'liquidated', 'sale_id']])->assertJsonPath('data.liquidated', true)->assertJsonPath('data.layaway.fecha_vencimiento', $dueDate);
 
         $this->withHeaders($headers)->getJson('/api/cash-cuts')->assertOk()->assertJsonStructure(['data', 'meta']);
         $this->withHeaders($headers)->postJson('/api/cash-cuts/preview', ['date' => now()->toDateString()])->assertOk()->assertJsonStructure(['data' => ['totals' => ['date', 'sales_count', 'total_sold', 'payments_by_method']]]);
@@ -108,4 +108,14 @@ class ApiContractTest extends TestCase
         $inactive->assignRole('gerente');
         $this->postJson('/api/login', ['email' => $inactive->email, 'password' => 'password'])->assertUnprocessable();
     }
+    public function test_deactivated_account_cannot_keep_using_its_existing_android_token(): void
+    {
+        $token = $this->token($this->manager);
+        $this->manager->update(['active' => false]);
+        $this->api($token)->getJson('/api/me')->assertUnauthorized();
+        $this->assertDatabaseCount('personal_access_tokens', 0);
+        $this->api($token)->getJson('/api/products')->assertUnauthorized();
+        $this->api($token)->getJson('/api/notifications')->assertUnauthorized();
+    }
+
 }

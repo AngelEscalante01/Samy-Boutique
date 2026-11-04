@@ -1,248 +1,276 @@
 <script setup>
-import { Head, Link } from '@inertiajs/vue3';
-import { computed } from 'vue';
+import { Head, Link, usePage } from '@inertiajs/vue3';
+import axios from 'axios';
+import {
+    CategoryScale,
+    Chart,
+    LineController,
+    LineElement,
+    LinearScale,
+    PointElement,
+    Tooltip,
+} from 'chart.js';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 
-// ── Props desde Inertia (con defaults para evitar errores si llegan vacíos) ──
+Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Tooltip);
+
 const props = defineProps({
-    stats: {
-        type: Object,
-        default: () => ({
-            sales_total_today:  0,
-            sales_count_today:  0,
-            layaways_active:    0,
-            products_available: 0,
-            profit_today:       null,
-        }),
-    },
-    recentSales:    { type: Array, default: () => [] },
-    recentLayaways: { type: Array, default: () => [] },
-    isManager:      { type: Boolean, default: false },
+    snapshot: { type: Object, default: () => ({}) },
+    endpoints: { type: Object, default: () => ({}) },
 });
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-const todayLabel = computed(() => {
-    return new Intl.DateTimeFormat('es-MX', {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-    }).format(new Date());
+const page = usePage();
+const summary = ref(props.snapshot?.summary ?? {});
+const weeklySales = ref(props.snapshot?.chart ?? { labels: [], series: [] });
+const recentSales = ref(props.snapshot?.recentSales ?? []);
+const recentLayaways = ref(props.snapshot?.recentLayaways ?? []);
+const refreshing = ref(false);
+const refreshError = ref(false);
+const chartCanvas = ref(null);
+let chart = null;
+
+const permissions = computed(() => {
+    const userPermissions = page.props.auth?.user?.permissions;
+    if (Array.isArray(userPermissions)) return new Set(userPermissions);
+    const legacy = page.props.permissions;
+    if (legacy && typeof legacy === 'object') {
+        return new Set(Object.entries(legacy).filter(([, value]) => value === true).map(([key]) => key));
+    }
+    return new Set();
 });
 
-function money(v) {
-    return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(v ?? 0);
+function can(permission) {
+    return permissions.value.size === 0 || permissions.value.has(permission);
 }
 
-// Cards para cajero
-const cashierCards = computed(() => [
+function money(value) {
+    return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(Number(value ?? 0));
+}
+
+function number(value) {
+    return new Intl.NumberFormat('es-MX').format(Number(value ?? 0));
+}
+
+function shortDate(value) {
+    if (!value) return '';
+    const date = new Date(`${value}T12:00:00`);
+    if (Number.isNaN(date.getTime())) return value;
+    if (value === summary.value.date) return 'Hoy';
+    return new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short' }).format(date);
+}
+
+const dateLabel = computed(() => {
+    const date = summary.value.date ? new Date(`${summary.value.date}T12:00:00`) : new Date();
+    const formatted = new Intl.DateTimeFormat('es-MX', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+    }).format(date);
+    return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+});
+
+const metrics = computed(() => [
     {
-        key: 'total',
-        label: 'Ventas del día',
-        value: money(props.stats.sales_total_today),
-        icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z',
-        color: 'bg-blue-50 text-blue-600',
-        ring:  'ring-blue-100',
-    },
-    {
-        key: 'count',
-        label: '# Ventas realizadas',
-        value: props.stats.sales_count_today,
-        icon: 'M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2m-6 9 2 2 4-4',
-        color: 'bg-indigo-50 text-indigo-600',
-        ring:  'ring-indigo-100',
+        key: 'sales',
+        label: 'Ventas de hoy',
+        value: money(summary.value.total),
+        note: `${number(summary.value.count)} ${Number(summary.value.count) === 1 ? 'venta realizada' : 'ventas realizadas'}`,
     },
     {
         key: 'layaways',
         label: 'Apartados activos',
-        value: props.stats.layaways_active,
-        icon: 'M19 11H5m14 0a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2m14 0V9a2 2 0 0 0-2-2M5 11V9a2 2 0 0 1 2-2m0 0V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2M7 7h10',
-        color: 'bg-amber-50 text-amber-600',
-        ring:  'ring-amber-100',
+        value: number(summary.value.layaways_active_count),
+        note: `${money(summary.value.layaways_pending_total)} pendiente por cobrar`,
     },
-]);
-
-// Cards adicionales para gerente
-const managerCards = computed(() => [
-    ...cashierCards.value,
     {
         key: 'products',
         label: 'Productos disponibles',
-        value: props.stats.products_available,
-        icon: 'M6 7h12M6 7l1 14h10l1-14M6 7V5a3 3 0 0 1 6 0v2',
-        color: 'bg-green-50 text-green-600',
-        ring:  'ring-green-100',
+        value: number(summary.value.products_available),
+        note: 'Registrados como disponibles',
     },
-    ...(props.stats.profit_today !== null ? [{
-        key: 'profit',
-        label: 'Ganancia estimada',
-        value: money(props.stats.profit_today),
-        icon: 'M13 7h8m0 0v8m0-8-8 8-4-4-6 6',
-        color: 'bg-emerald-50 text-emerald-600',
-        ring:  'ring-emerald-100',
-    }] : []),
 ]);
 
-const displayCards = computed(() => props.isManager ? managerCards.value : cashierCards.value);
+const latestSales = computed(() => recentSales.value.slice(0, 3));
+const latestLayaways = computed(() => recentLayaways.value.slice(0, 4));
+const chartValues = computed(() => (weeklySales.value?.series ?? []).map((point) => Number(point.total ?? 0)));
+const hasWeeklySales = computed(() => chartValues.value.some((value) => value > 0));
+
+function endpoint(name, fallback) {
+    return props.endpoints?.[name] ?? route(fallback);
+}
+
+async function refreshDashboard() {
+    if (refreshing.value) return;
+    refreshing.value = true;
+    refreshError.value = false;
+
+    const requests = await Promise.allSettled([
+        axios.get(endpoint('summary', 'dashboard.data.summary')),
+        axios.get(endpoint('chart', 'dashboard.data.chart'), { params: { mode: '7d' } }),
+        axios.get(endpoint('recentSales', 'dashboard.data.recent-sales')),
+        axios.get(endpoint('recentLayaways', 'dashboard.data.recent-layaways')),
+    ]);
+
+    if (requests[0].status === 'fulfilled') summary.value = requests[0].value.data;
+    if (requests[1].status === 'fulfilled') weeklySales.value = requests[1].value.data;
+    if (requests[2].status === 'fulfilled') recentSales.value = requests[2].value.data;
+    if (requests[3].status === 'fulfilled') recentLayaways.value = requests[3].value.data;
+    refreshError.value = requests.some((result) => result.status === 'rejected');
+    refreshing.value = false;
+}
+
+function renderChart() {
+    chart?.destroy();
+    chart = null;
+    if (!chartCanvas.value || !hasWeeklySales.value) return;
+
+    const context = chartCanvas.value.getContext('2d');
+    if (!context) return;
+
+    chart = new Chart(context, {
+        type: 'line',
+        data: {
+            labels: weeklySales.value?.labels ?? [],
+            datasets: [{
+                data: chartValues.value,
+                borderColor: '#a16207',
+                backgroundColor: '#a16207',
+                borderWidth: 2.5,
+                pointRadius: 3,
+                pointHoverRadius: 5,
+                tension: 0.3,
+            }],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label(point) { return money(point.parsed.y); },
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    grid: { display: false },
+                    ticks: { color: '#78716c' },
+                    border: { display: false },
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: '#e7e5e4' },
+                    border: { display: false, dash: [4, 4] },
+                    ticks: {
+                        color: '#78716c',
+                        callback(value) {
+                            return new Intl.NumberFormat('es-MX', { notation: 'compact' }).format(value);
+                        },
+                    },
+                },
+            },
+        },
+    });
+}
+
+watch(weeklySales, async () => {
+    await nextTick();
+    renderChart();
+});
+
+onMounted(async () => {
+    await nextTick();
+    renderChart();
+});
+
+onBeforeUnmount(() => {
+    chart?.destroy();
+});
 </script>
 
 <template>
-    <Head title="Dashboard" />
+    <Head title="Resumen de hoy — Samy Boutique" />
 
-    <div class="mx-auto max-w-7xl space-y-6">
-
-        <!-- ── Encabezado ──────────────────────────────────────────────── -->
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div class="mx-auto max-w-7xl space-y-6 pb-8 app-card-stack app-page">
+        <header class="flex flex-wrap items-start justify-between gap-4 app-heading">
             <div>
-                <h1 class="text-xl font-bold text-gray-900">Dashboard</h1>
-                <p class="mt-0.5 text-sm capitalize text-gray-500">{{ todayLabel }} · Resumen del día</p>
+                <p class="text-sm font-medium text-stone-500">{{ dateLabel }}</p>
+                <h1 class="mt-1 text-3xl font-semibold tracking-tight text-zinc-950">Resumen de hoy</h1>
             </div>
-
-            <!-- Botones de acción según rol -->
-            <div class="flex flex-wrap gap-2">
-                <Link
-                    :href="route('pos.index')"
-                    class="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2"
-                >
-                    <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M7 7h10M7 11h10M7 15h6M6 3h12a2 2 0 0 1 2 2v14H4V5a2 2 0 0 1 2-2Z"/>
-                    </svg>
-                    Ir al POS
-                </Link>
-
-                <template v-if="isManager">
-                    <Link
-                        :href="route('reports.dailyCut')"
-                        class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
-                    >
-                        <svg class="h-4 w-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M9 7H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3m-1-4H8m0 0a2 2 0 1 0 4 0M8 3a2 2 0 0 1 4 0"/>
-                        </svg>
-                        Corte del día
-                    </Link>
-                    <Link
-                        :href="route('reports.dailyCut')"
-                        class="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
-                    >
-                        <svg class="h-4 w-4 text-gray-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M4 19V5M8 17v-6M12 17V7M16 17v-4M20 17v-8"/>
-                        </svg>
-                        Reportes
-                    </Link>
-                </template>
+            <div class="flex flex-wrap items-center gap-2">
+                <button type="button" class="inline-flex min-h-11 items-center gap-2 rounded-xl border border-stone-300 bg-white px-4 text-sm font-medium text-stone-700 transition hover:bg-stone-100 disabled:opacity-50" :disabled="refreshing" :aria-busy="refreshing" @click="refreshDashboard">
+                    <svg aria-hidden="true" class="h-4 w-4" :class="{ 'animate-spin': refreshing }" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M20 11a8 8 0 1 1-2.3-5.7" /><path d="M20 4v5h-5" /></svg>
+                    {{ refreshing ? 'Actualizando' : 'Actualizar' }}
+                </button>
+                <Link v-if="can('pos.view')" :href="route('pos.index')" class="inline-flex min-h-11 items-center rounded-xl bg-zinc-900 px-5 text-sm font-semibold text-white transition hover:bg-zinc-700">Nueva venta</Link>
+                <Link v-if="can('pos.view')" :href="route('layaways.create')" class="inline-flex min-h-11 items-center rounded-xl border border-zinc-900 bg-white px-5 text-sm font-semibold text-zinc-900 transition hover:bg-stone-100">Nuevo apartado</Link>
             </div>
-        </div>
+        </header>
 
-        <!-- ── Stats cards ─────────────────────────────────────────────── -->
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            <div
-                v-for="card in displayCards"
-                :key="card.key"
-                class="flex items-center gap-4 rounded-xl bg-white p-5 shadow-sm ring-1"
-                :class="card.ring"
-            >
-                <!-- Icono -->
-                <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl" :class="card.color">
-                    <svg class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-                        <path :d="card.icon" />
-                    </svg>
+        <p v-if="refreshError" role="status" class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">No se pudo actualizar toda la información. Intenta de nuevo.</p>
+
+        <section aria-label="Cifras clave" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 app-card-grid">
+            <article v-for="metric in metrics" :key="metric.key" class="rounded-2xl border p-5 sm:p-6 app-surface" :class="metric.key === 'sales' ? 'border-zinc-900 bg-zinc-900 text-white' : 'border-stone-200 bg-white text-zinc-900'">
+                <h2 class="text-sm font-medium" :class="metric.key === 'sales' ? 'text-stone-300' : 'text-stone-500'">{{ metric.label }}</h2>
+                <p class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">{{ metric.value }}</p>
+                <p class="mt-2 text-sm" :class="metric.key === 'sales' ? 'text-stone-300' : 'text-stone-600'">{{ metric.note }}</p>
+            </article>
+        </section>
+
+        <div class="grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] lg:items-start app-card-grid">
+            <section class="rounded-2xl border border-stone-200 bg-white p-5 sm:p-6 app-surface" aria-labelledby="recent-sales-title">
+                <div class="mb-4 flex items-center justify-between gap-3">
+                    <h2 id="recent-sales-title" class="text-lg font-semibold text-zinc-900">Ventas recientes</h2>
+                    <Link v-if="can('sales.view')" :href="route('sales.index')" class="text-sm font-semibold text-amber-800 hover:underline">Ver todas</Link>
                 </div>
-
-                <!-- Datos -->
-                <div class="min-w-0 flex-1">
-                    <p class="truncate text-xs font-medium uppercase tracking-wide text-gray-500">{{ card.label }}</p>
-                    <p class="mt-0.5 text-2xl font-bold text-gray-900 tabular-nums">{{ card.value }}</p>
-                </div>
-            </div>
-        </div>
-
-        <!-- ── Actividad reciente ─────────────────────────────────────── -->
-        <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-
-            <!-- Últimas ventas -->
-            <div class="rounded-xl bg-white shadow-sm ring-1 ring-gray-100">
-                <div class="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-                    <h2 class="text-sm font-semibold text-gray-900">Últimas ventas</h2>
-                    <Link :href="route('sales.index')" class="text-xs font-medium text-indigo-600 hover:text-indigo-500">
-                        Ver todas →
-                    </Link>
-                </div>
-
-                <div v-if="recentSales.length" class="divide-y divide-gray-50">
-                    <div
-                        v-for="sale in recentSales"
-                        :key="sale.id"
-                        class="flex items-center gap-3 px-5 py-3.5"
-                    >
-                        <!-- Folio badge -->
-                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-xs font-bold text-indigo-600">
-                            #{{ sale.folio }}
-                        </span>
-
-                        <div class="min-w-0 flex-1">
-                            <p class="truncate text-sm font-medium text-gray-900">{{ sale.customer }}</p>
-                            <p class="text-xs text-gray-400">{{ sale.date }}&nbsp;&nbsp;{{ sale.time }}</p>
+                <div v-if="latestSales.length" class="divide-y divide-stone-100">
+                    <Link v-for="sale in latestSales" :key="sale.id" :href="route('sales.show', sale.id)" class="flex items-center justify-between gap-4 py-3 transition hover:bg-stone-50">
+                        <div class="min-w-0">
+                            <p class="truncate text-sm font-medium text-zinc-900">{{ sale.customer }}</p>
+                            <p class="mt-0.5 text-xs text-stone-500">{{ shortDate(sale.date) }} · {{ sale.time }} · #{{ sale.folio }}</p>
                         </div>
-
-                        <span class="shrink-0 text-sm font-semibold text-gray-900 tabular-nums">
-                            {{ new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(sale.total) }}
-                        </span>
-                    </div>
-                </div>
-
-                <div v-else class="flex flex-col items-center justify-center gap-2 px-5 py-10 text-gray-400">
-                    <svg class="h-10 w-10 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2M9 5a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2M9 5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2"/>
-                    </svg>
-                    <p class="text-sm">Sin ventas recientes</p>
-                </div>
-            </div>
-
-            <!-- Últimos apartados -->
-            <div class="rounded-xl bg-white shadow-sm ring-1 ring-gray-100">
-                <div class="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-                    <h2 class="text-sm font-semibold text-gray-900">Apartados activos</h2>
-                    <Link :href="route('layaways.index')" class="text-xs font-medium text-amber-600 hover:text-amber-500">
-                        Ver todos →
+                        <span class="shrink-0 text-sm font-semibold text-zinc-900">{{ money(sale.total) }}</span>
                     </Link>
                 </div>
+                <p v-else class="py-8 text-sm text-stone-500">Aún no hay ventas recientes.</p>
+            </section>
 
-                <div v-if="recentLayaways.length" class="divide-y divide-gray-50">
-                    <div
-                        v-for="lay in recentLayaways"
-                        :key="lay.id"
-                        class="flex items-center gap-3 px-5 py-3.5"
-                    >
-                        <!-- Folio badge -->
-                        <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-xs font-bold text-amber-600">
-                            #{{ lay.folio }}
-                        </span>
-
-                        <div class="min-w-0 flex-1">
-                            <p class="truncate text-sm font-medium text-gray-900">{{ lay.customer }}</p>
-                            <p class="text-xs text-gray-400">
-                                Abonado:
-                                {{ new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(lay.paid) }}
-                                de
-                                {{ new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(lay.subtotal) }}
-                            </p>
+            <section class="rounded-2xl border border-stone-200 bg-white p-5 sm:p-6 app-surface" aria-labelledby="active-layaways-title">
+                <div class="mb-4 flex items-center justify-between gap-3">
+                    <h2 id="active-layaways-title" class="text-lg font-semibold text-zinc-900">Últimos apartados</h2>
+                    <Link v-if="can('pos.view')" :href="route('layaways.index')" class="text-sm font-semibold text-amber-800 hover:underline">Ver todos</Link>
+                </div>
+                <div v-if="latestLayaways.length" class="divide-y divide-stone-100">
+                    <Link v-for="layaway in latestLayaways" :key="layaway.id" :href="route('layaways.show', layaway.id)" class="flex items-center justify-between gap-4 py-3 transition hover:bg-stone-50">
+                        <div class="min-w-0">
+                            <p class="truncate text-sm font-medium text-zinc-900">{{ layaway.customer }}</p>
+                            <p class="mt-0.5 text-xs text-stone-500">Apartado #{{ layaway.folio }}</p>
                         </div>
-
-                        <!-- Saldo pendiente -->
                         <div class="shrink-0 text-right">
-                            <p class="text-sm font-semibold text-red-600 tabular-nums">
-                                {{ new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(lay.balance) }}
-                            </p>
-                            <p class="text-xs text-gray-400">pendiente</p>
+                            <p class="text-sm font-semibold text-zinc-900">{{ money(layaway.balance) }}</p>
+                            <p class="text-xs text-stone-500">pendiente</p>
                         </div>
-                    </div>
+                    </Link>
                 </div>
+                <p v-else class="py-8 text-sm text-stone-500">No hay apartados activos.</p>
+            </section>
+        </div>
 
-                <div v-else class="flex flex-col items-center justify-center gap-2 px-5 py-10 text-gray-400">
-                    <svg class="h-10 w-10 opacity-30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2m14 0V9a2 2 0 0 0-2-2M5 11V9a2 2 0 0 1 2-2m0 0V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2M7 7h10"/>
-                    </svg>
-                    <p class="text-sm">Sin apartados activos</p>
-                </div>
+        <section class="rounded-2xl border border-stone-200 bg-white p-5 sm:p-6 app-surface" aria-labelledby="weekly-sales-title">
+            <div class="mb-5">
+                <h2 id="weekly-sales-title" class="text-lg font-semibold text-zinc-900">Ventas de los últimos 7 días</h2>
+                <p class="mt-1 text-sm text-stone-500">Consulta cómo se han movido las ventas esta semana.</p>
             </div>
-
-        </div><!-- /grid actividad -->
-
+            <div v-if="hasWeeklySales" class="h-56 sm:h-64">
+                <canvas ref="chartCanvas" role="img" aria-label="Gráfica de ventas de los últimos siete días"></canvas>
+                <ul class="sr-only">
+                    <li v-for="(point, index) in weeklySales.series" :key="point.date ?? index">{{ weeklySales.labels?.[index] }}: {{ money(point.total) }}</li>
+                </ul>
+            </div>
+            <p v-else class="rounded-xl bg-stone-50 px-4 py-8 text-center text-sm text-stone-500">Aún no hay ventas registradas en los últimos 7 días.</p>
+        </section>
     </div>
 </template>

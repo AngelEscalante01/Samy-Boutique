@@ -1,0 +1,11 @@
+{
+  "tests_passed": 13,
+  "products": 314,
+  "release": "20261101-r7",
+  "rows": 421,
+  "read_only": true,
+  "pages": 11,
+  "assertions": 166,
+  "unavailable_rows": 0,
+  "print_jobs_created": 0
+}

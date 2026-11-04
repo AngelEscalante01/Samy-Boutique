@@ -8,6 +8,12 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Present already in the Neubox schema, although this migration is
+        // absent from its migrations table. Keep the existing data and type.
+        if (Schema::hasColumn('sales', 'cash_received')) {
+            return;
+        }
+
         Schema::table('sales', function (Blueprint $table) {
             $table->decimal('cash_received', 10, 2)->nullable()->after('total');
         });
@@ -15,8 +21,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::table('sales', function (Blueprint $table) {
-            $table->dropColumn('cash_received');
-        });
+        // The column may predate this migration and contain historical money.
+        // Never drop it during an automated rollback.
     }
 };

@@ -17,3 +17,20 @@ yarn-error.log
 /.fleet
 /.idea
 /.vscode
+
+# Secretos del entorno privado de aceptación VPS
+/.env.*.private
+/firebase-dev-service-account.json
+/qa-browser-access.private.json
+/firebase-prod-service-account.json
+/.private/
+/private-source/
+/private-audit/
+/private-backups/
+/release-state/
+/ops/__pycache__/
+/release-source.tar.gz
+/release-source-manifest.json
+
+# Windows shell diagnostic artifact
+/NUL

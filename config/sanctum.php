@@ -35,7 +35,7 @@ return [
     */
 
     // La API móvil usa exclusivamente Bearer tokens. La sesión web usa su guard propio.
-    'guard' => [],
+    'guard' => ['web'],
 
     /*
     |--------------------------------------------------------------------------

@@ -14,6 +14,7 @@ class StoreSaleRequest extends FormRequest
     public function rules(): array
     {
         return [
+            'operation_key' => ['nullable', 'string', 'regex:/\A[A-Za-z0-9._:-]{16,100}\z/'],
             'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
 
             'items' => ['required', 'array', 'min:1', 'max:50'],

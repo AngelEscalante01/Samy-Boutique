@@ -6,6 +6,8 @@ import { resolvePageComponent } from 'laravel-vite-plugin/inertia-helpers';
 import { createApp, h } from 'vue';
 import { ZiggyVue } from '../../vendor/tightenco/ziggy';
 import AppLayout from '@/Layouts/AppLayout.vue';
+import { setupGlobalPrintResultHandler } from '@/bridges/printResultHandler';
+import { setupAndroidPrinterBridgeGlobal } from '@/services/printSale';
 import { registerSW } from 'virtual:pwa-register';
 
 // Registrar el service worker — se actualiza automáticamente en segundo plano
@@ -16,10 +18,13 @@ registerSW({
     },
 });
 
-const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
+setupGlobalPrintResultHandler();
+setupAndroidPrinterBridgeGlobal();
+
+const appName = import.meta.env.VITE_APP_NAME || 'Samy Boutique';
 
 createInertiaApp({
-    title: (title) => `${title} - ${appName}`,
+    title: (title) => title.includes('Samy Boutique') ? title : `${title} — ${appName}`,
     resolve: (name) =>
         resolvePageComponent(
             `./Pages/${name}.vue`,

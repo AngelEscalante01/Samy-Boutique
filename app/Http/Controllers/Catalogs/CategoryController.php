@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreCategoryRequest;
 use App\Http\Requests\UpdateCategoryRequest;
 use App\Models\Category;
+use App\Services\CatalogCodeService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -33,10 +35,10 @@ class CategoryController extends Controller
     {
         $validated = $request->validated();
 
-        Category::create([
-            'name' => $validated['name'],
-            'active' => (bool) $validated['active'],
-        ]);
+        DB::transaction(function () use ($validated) {
+            $category = Category::create(['name' => $validated['name'], 'active' => (bool) $validated['active']]);
+            app(CatalogCodeService::class)->setPrefix($category, $validated['sku_prefix'] ?? null);
+        });
 
         return back()->with('success', 'Categoría creada.');
     }
@@ -45,10 +47,12 @@ class CategoryController extends Controller
     {
         $validated = $request->validated();
 
-        $category->update([
-            'name' => $validated['name'],
-            'active' => (bool) $validated['active'],
-        ]);
+        DB::transaction(function () use ($category, $validated) {
+            $category->update(['name' => $validated['name'], 'active' => (bool) $validated['active']]);
+            if (array_key_exists('sku_prefix', $validated)) {
+                app(CatalogCodeService::class)->setPrefix($category, $validated['sku_prefix']);
+            }
+        });
 
         return back()->with('success', 'Categoría actualizada.');
     }

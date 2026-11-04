@@ -17,12 +17,12 @@ defineProps({
 <template>
     <Head title="Profile" />
 
-    <div class="mx-auto max-w-7xl space-y-6">
-        <div class="flex items-center justify-between gap-4">
+    <div class="mx-auto max-w-7xl space-y-6 app-page app-card-stack">
+        <div class="flex items-center justify-between gap-4 app-heading">
             <h1 class="text-lg font-semibold text-gray-900">Perfil</h1>
         </div>
 
-        <div class="bg-white p-4 shadow sm:rounded-lg sm:p-8">
+        <div class="bg-white p-4 shadow sm:rounded-lg sm:p-8 app-surface">
             <UpdateProfileInformationForm
                 :must-verify-email="mustVerifyEmail"
                 :status="status"
@@ -30,11 +30,11 @@ defineProps({
             />
         </div>
 
-        <div class="bg-white p-4 shadow sm:rounded-lg sm:p-8">
+        <div class="bg-white p-4 shadow sm:rounded-lg sm:p-8 app-surface">
             <UpdatePasswordForm class="max-w-xl" />
         </div>
 
-        <div class="bg-white p-4 shadow sm:rounded-lg sm:p-8">
+        <div class="bg-white p-4 shadow sm:rounded-lg sm:p-8 app-surface">
             <DeleteUserForm class="max-w-xl" />
         </div>
     </div>

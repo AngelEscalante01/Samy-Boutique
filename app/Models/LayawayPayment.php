@@ -16,6 +16,9 @@ class LayawayPayment extends Model
         'amount',
         'reference',
         'paid_at',
+        'created_by',
+        'observacion',
+        'payer_name',
     ];
 
     protected $casts = [
@@ -26,5 +29,10 @@ class LayawayPayment extends Model
     public function layaway(): BelongsTo
     {
         return $this->belongsTo(Layaway::class);
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 }

@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Models\NotificationDelivery;
+use App\Models\NotificationDevice;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
@@ -35,6 +38,35 @@ class AuthController extends ApiController
 
     public function logout(Request $request)
     {
+        $installationId = $request->validate([
+            'installation_id' => ['nullable', 'uuid'],
+        ])['installation_id'] ?? null;
+
+        if ($installationId) {
+            DB::transaction(function () use ($request, $installationId): void {
+                $device = NotificationDevice::query()
+                    ->where('installation_id', $installationId)
+                    ->where('user_id', $request->user()->id)
+                    ->lockForUpdate()
+                    ->first();
+                if (! $device) {
+                    return;
+                }
+
+                NotificationDelivery::query()
+                    ->where('device_id', $device->id)
+                    ->whereIn('status', ['pending', 'error_temporal', 'sending'])
+                    ->update(['status' => 'cancelled', 'next_attempt_at' => null, 'last_error_code' => 'device_logged_out']);
+                $device->update([
+                    'user_id' => null,
+                    'token' => null,
+                    'token_hash' => null,
+                    'active' => false,
+                    'permission_status' => 'not_determined',
+                ]);
+            });
+        }
+
         $token = $request->user()->currentAccessToken();
         if ($token instanceof \Laravel\Sanctum\PersonalAccessToken) {
             $token->delete();

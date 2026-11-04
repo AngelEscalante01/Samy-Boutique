@@ -8,7 +8,7 @@ defineProps({
 </script>
 
 <template>
-  <div class="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
+  <div class="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm app-surface">
     <div class="overflow-x-auto">
       <table class="min-w-full divide-y divide-stone-100 text-sm">
         <!-- Head -->

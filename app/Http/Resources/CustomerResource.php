@@ -22,6 +22,9 @@ class CustomerResource extends JsonResource
             'phone' => $this->phone,
             'active' => (bool) $this->active,
             'purchases_count' => (int) $this->purchases_count,
+            'photo_url' => $request->user()?->can('customers.view') && $this->photo_path
+                ? route('customers.photo', ['customer' => $this->id, 'generation' => $this->photo_generation])
+                : null,
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];

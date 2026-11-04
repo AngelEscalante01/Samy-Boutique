@@ -1,0 +1,26 @@
+# Optional local-only overlay; supply the private Resend env file last.
+# Every development message is redirected to MAIL_DEVELOPMENT_TO by config/mail.php.
+x-resend-environment: &resend-environment
+  MAIL_MAILER: smtp
+  MAIL_HOST: smtp.resend.com
+  MAIL_PORT: "465"
+  MAIL_SCHEME: smtps
+  MAIL_USERNAME: resend
+  MAIL_PASSWORD: ${MAIL_PASSWORD:?Supply the private Resend development env file}
+  MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:?Supply the verified development sender}
+  MAIL_FROM_NAME: Samy Boutique Desarrollo
+  MAIL_DEVELOPMENT_TO: ${MAIL_DEVELOPMENT_TO:?Supply the authorized test inbox}
+
+services:
+  web:
+    environment: *resend-environment
+    networks: [sandbox, edge]
+  queue-default:
+    environment: *resend-environment
+    networks: [sandbox, edge]
+  queue-sales:
+    environment: *resend-environment
+    networks: [sandbox, edge]
+  scheduler:
+    environment: *resend-environment
+    networks: [sandbox, edge]

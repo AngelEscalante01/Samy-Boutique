@@ -113,12 +113,12 @@ function isEditing(type, id) {
 <template>
     <Head title="Catálogos" />
 
-    <div class="mx-auto max-w-7xl space-y-6">
-        <div class="flex items-center justify-between gap-4">
+    <div class="mx-auto max-w-7xl space-y-6 app-card-stack app-page">
+        <div class="flex items-center justify-between gap-4 app-heading">
             <h1 class="text-lg font-semibold text-gray-900">Catálogos</h1>
         </div>
 
-        <div class="rounded-lg bg-white p-4 shadow">
+        <div class="rounded-lg bg-white p-4 shadow app-surface">
             <div class="flex flex-wrap gap-2">
                 <button
                     type="button"
@@ -157,8 +157,8 @@ function isEditing(type, id) {
         </div>
 
         <!-- Categorías -->
-        <div v-if="tab === 'categories'" class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div class="rounded-lg bg-white p-6 shadow">
+        <div v-if="tab === 'categories'" class="grid grid-cols-1 gap-4 lg:grid-cols-2 app-card-grid">
+            <div class="rounded-lg bg-white p-6 shadow app-surface">
                 <h2 class="text-sm font-semibold text-gray-900">{{ editingType === 'categories' ? 'Editar categoría' : 'Nueva categoría' }}</h2>
                 <form class="mt-4 space-y-3" @submit.prevent="submitCategory">
                     <div>
@@ -189,7 +189,7 @@ function isEditing(type, id) {
                 </form>
             </div>
 
-            <div class="overflow-hidden rounded-lg bg-white shadow">
+            <div class="overflow-hidden rounded-lg bg-white shadow app-surface">
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-gray-200">
                         <thead class="bg-gray-50">
@@ -231,8 +231,8 @@ function isEditing(type, id) {
         </div>
 
         <!-- Tallas -->
-        <div v-if="tab === 'sizes'" class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div class="rounded-lg bg-white p-6 shadow">
+        <div v-if="tab === 'sizes'" class="grid grid-cols-1 gap-4 lg:grid-cols-2 app-card-grid">
+            <div class="rounded-lg bg-white p-6 shadow app-surface">
                 <h2 class="text-sm font-semibold text-gray-900">{{ editingType === 'sizes' ? 'Editar talla' : 'Nueva talla' }}</h2>
                 <form class="mt-4 space-y-3" @submit.prevent="submitSize">
                     <div>
@@ -263,7 +263,7 @@ function isEditing(type, id) {
                 </form>
             </div>
 
-            <div class="overflow-hidden rounded-lg bg-white shadow">
+            <div class="overflow-hidden rounded-lg bg-white shadow app-surface">
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-gray-200">
                         <thead class="bg-gray-50">
@@ -305,8 +305,8 @@ function isEditing(type, id) {
         </div>
 
         <!-- Colores -->
-        <div v-if="tab === 'colors'" class="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div class="rounded-lg bg-white p-6 shadow">
+        <div v-if="tab === 'colors'" class="grid grid-cols-1 gap-4 lg:grid-cols-2 app-card-grid">
+            <div class="rounded-lg bg-white p-6 shadow app-surface">
                 <h2 class="text-sm font-semibold text-gray-900">{{ editingType === 'colors' ? 'Editar color' : 'Nuevo color' }}</h2>
                 <form class="mt-4 space-y-3" @submit.prevent="submitColor">
                     <div>
@@ -355,7 +355,7 @@ function isEditing(type, id) {
                 </form>
             </div>
 
-            <div class="overflow-hidden rounded-lg bg-white shadow">
+            <div class="overflow-hidden rounded-lg bg-white shadow app-surface">
                 <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-gray-200">
                         <thead class="bg-gray-50">

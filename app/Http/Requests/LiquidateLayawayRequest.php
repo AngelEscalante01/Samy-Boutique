@@ -19,6 +19,7 @@ class LiquidateLayawayRequest extends FormRequest
             'payments.*.method' => ['required_with:payments.*.amount', 'string', 'in:cash,card,transfer,other'],
             'payments.*.amount' => ['nullable', 'numeric', 'min:0.01'],
             'payments.*.reference' => ['nullable', 'string', 'max:120'],
+            'payments.*.payer_name' => ['nullable', 'string', 'max:180'],
         ];
     }
 

@@ -17,6 +17,8 @@ class CouponController extends Controller
     {
         $q = $request->string('q')->toString();
         $active = $request->string('active')->toString();
+        $validity = $request->string('validity')->toString();
+        $now = now();
 
         $coupons = Coupon::query()
             ->withCount('redemptions')
@@ -27,6 +29,12 @@ class CouponController extends Controller
                 });
             })
             ->when(in_array($active, ['0', '1'], true), fn ($query) => $query->where('active', (int) $active === 1))
+            ->when($validity === 'expired', fn ($query) => $query->where('ends_at', '<', $now))
+            ->when($validity === 'upcoming', fn ($query) => $query->where('starts_at', '>', $now)
+                ->where(fn ($sub) => $sub->whereNull('ends_at')->orWhere('ends_at', '>=', $now)))
+            ->when($validity === 'active', fn ($query) => $query
+                ->where(fn ($sub) => $sub->whereNull('starts_at')->orWhere('starts_at', '<=', $now))
+                ->where(fn ($sub) => $sub->whereNull('ends_at')->orWhere('ends_at', '>=', $now)))
             ->latest('id')
             ->paginate(15)
             ->withQueryString();
@@ -35,6 +43,7 @@ class CouponController extends Controller
             'filters' => [
                 'q' => $q,
                 'active' => $active,
+                'validity' => $validity,
             ],
             'coupons' => CouponResource::collection($coupons),
         ]);
@@ -70,7 +79,7 @@ class CouponController extends Controller
         $coupon->loadCount('redemptions');
 
         return Inertia::render('Coupons/Edit', [
-            'coupon' => new CouponResource($coupon),
+            'coupon' => (new CouponResource($coupon))->resolve(),
         ]);
     }
 

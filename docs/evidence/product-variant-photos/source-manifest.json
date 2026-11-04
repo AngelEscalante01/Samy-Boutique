@@ -1,0 +1,22 @@
+{
+  "app/Models/ProductImage.php": "b43432857d85d08759091eca3ab0872186af4de729475781a74934b20c8cff5a",
+  "app/Services/ProductImageAssignments.php": "61cd7f25ff5bf6d9196a1e37d13bfef1756d471bc4769c015e019ccfffebed32",
+  "app/Actions/Products/StoreProductImagesAction.php": "6d684c28dbc91da0aec84409d38dba91cc987402ecb49b07e7c6f8e5bea2d50f",
+  "app/Http/Requests/Concerns/ProductImageAssociationRules.php": "7e5491fba9fc93217c6138339ae5a7cfea23cfb55ad8c29e9335abfd864d1bf0",
+  "app/Http/Requests/StoreProductRequest.php": "d3341b9af81d1c5af3ebea16e066bad787dd47770a88c93f5180b7acccbd1407",
+  "app/Http/Requests/UpdateProductRequest.php": "89e8488ec5b55a667eda932c1469a9340d47ee51458dc218a7b55120fc04f153",
+  "app/Http/Resources/ProductResource.php": "439703cf5bbbd4193f4cd1dc2ca70994b8964b3eb7d84c40d9bd5ea7ff35cc09",
+  "app/Http/Controllers/ProductController.php": "35f5b51b227980ca3d5e36c4b2c3d3e0690a043f7ffe4faa32ce8127105bed13",
+  "app/Http/Controllers/ProductLabelController.php": "782fbd3c10f3d7e97b5fd5a8c73fe5e8d6c20fa861c59cfee3f4bcfb3aa82260",
+  "database/migrations/2026_10_30_000001_add_product_image_variant_ids.php": "20d8fb78e7610224fc6e4e3c7a9f124af419081a0909ed07735693652528792a",
+  "resources/css/app.css": "a76b844feeadfe674e5848e57ed67b0c4399caecd48a5885eb6f189d7260f06d",
+  "resources/js/Components/Products/BarcodePreview.vue": "e72a298579260b7bd28a1cfcd67c884047a2623adbb28cfc1dcf16069414efe9",
+  "resources/js/Components/Products/ProductEditor.vue": "216cd9ece6914baf74b1920223856e3e81f19db608e8ba20b810f2632ce8962c",
+  "resources/js/Components/Products/ProductLabelControls.vue": "65f6520a242f64156d40d3fc51dd9f4c4b6d585b9cdecf7a79c7a72cb4b3e3f2",
+  "resources/js/Components/Products/photo-scopes.js": "2a37e6a6aca3f0b95ece3d1ab4a6ed6a244958839947cd2d4caa560acc8a06b9",
+  "resources/js/Pages/Products/Create.vue": "a319c6b7e4343d21a38718b2b3da6f5581cc1e83dd9cad7bccf9409ed6eee37f",
+  "resources/js/Pages/Products/Edit.vue": "0a5e6da7a8454ff59ffabaf57df48524faa81b7fdca479895ed359a8bdb6dfc5",
+  "resources/js/Pages/Public/Catalog/Show.vue": "42bc12b907f25c8ea3475239e56fd1ab73cec6aec4661da9bf4a6f53cbae9188",
+  "tests/Feature/ProductVariantImagesTest.php": "e0b0cfdc7fc06d1124fbe1fc6ebb32a996caa6c06c18eceb6ad73f6192e530e8",
+  "tests/js/product-photo-scopes.test.mjs": "c06dcdc1e0b5dfd79ba68f95e0e44f431ca006bcb803e1882232b77f0686e37c"
+}

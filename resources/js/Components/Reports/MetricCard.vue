@@ -10,7 +10,7 @@ defineProps({
 </script>
 
 <template>
-  <div class="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 flex flex-col gap-1 min-w-0">
+  <div class="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200 flex flex-col gap-1 min-w-0 app-surface">
     <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 truncate">{{ label }}</p>
     <p
       :class="{
