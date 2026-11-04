@@ -45,4 +45,19 @@ El borrado automático de fotos después de 15 días continúa desactivado hasta
 - [Logo Android y pruebas](../../samy-boutique-app/docs/ANDROID_TICKET_LOGO_2026-11-03.md).
 - [Corrección del lector Android](../../samy-boutique-app/docs/ANDROID_SCANNER_FIX_2026-11-01.md).
 
-Los pendientes históricos de esos documentos deben interpretarse según su fecha; este cierre los actualiza en lo relativo a notificaciones e impresión aceptadas. No quedan pruebas funcionales pendientes acordadas para esta etapa. Los cambios locales se mantienen sin commit y las credenciales y respaldos privados quedan fuera de esta documentación.
+Los pendientes históricos de esos documentos deben interpretarse según su fecha; este cierre los actualiza en lo relativo a notificaciones e impresión aceptadas. No quedan pruebas funcionales pendientes acordadas para esta etapa. El código, las pruebas, las evidencias y la documentación quedaron versionados y subidos a GitHub. Las credenciales y los respaldos privados permanecen excluidos.
+
+## Integración final en GitHub — 4 de noviembre de 2026
+
+Ambos repositorios quedaron actualizados en sus ramas principales por solicitud del usuario. La integración fue directa (fast-forward), conservando el historial y sin conflictos ni uso de force push.
+
+| Repositorio | Rama principal | Commit de implementación y aceptación integrado |
+| --- | --- | --- |
+| [Samy-Boutique](https://github.com/AngelEscalante01/Samy-Boutique/tree/main) | main | ebfd17d58ba2ea9658596e6374db4bbc5c5bba50 |
+| [samy-boutique-app](https://github.com/AngelEscalante01/samy-boutique-app/tree/master) | master | 6c108de585977f8da84857122e634a1c7f367637 |
+
+Se verificaron las referencias remotas y la igualdad con los commits de la rama de trabajo codex/integral-local-20261024: cero commits de diferencia en ambos repositorios y árboles locales limpios al terminar la integración. Las ramas de trabajo se conservaron. Esta actualización documental posterior también se incorpora a las ramas principales; los hashes de la tabla identifican la entrega funcional integrada, no el commit documental posterior.
+
+No se modificó producción ni se ejecutó ningún despliegue para integrar o documentar estos cambios. No se repitieron pruebas funcionales: este paso solo registra la integración del trabajo previamente validado. No se incluyeron contraseñas, tokens, claves privadas, respaldos ni APK en Git; la APK final conserva su enlace de distribución ya documentado.
+
+**Cierre definitivo de esta etapa autorizado por el usuario.** Sin pendientes funcionales acordados de esta etapa. El borrado automático de fotos a los 15 días permanece pospuesto y desactivado por decisión previa.
